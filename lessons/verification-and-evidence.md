@@ -90,3 +90,53 @@ predecessor.
 output tends to be trusted *more* than the subject's own account. A parsing gap in the reviewer
 becomes a durable false fact about the subject. Adversarial review needs the same postcondition
 discipline as everything else: check the claim, not the confidence.
+
+---
+
+## A green signal is not the thing it claims to measure
+
+*2026-07-21*
+
+**Symptom.** Six separate incidents, wearing six different costumes, all with the same root shape:
+
+- A dashboard showed a server **GREEN** off a four-day-stale cache while that server's patches had
+  in fact been wiped — a live defect serving traffic behind a healthy badge.
+- A post-deploy audit **fired on schedule**, but its job's `if:` guard evaluated false and the job
+  skipped. The workflow ran; the check did not — and the self-heal built into that check therefore
+  never ran either, which is *why* the patch above stayed wiped.
+- A port-forwarding rule was **present in the config table but its listener was never bound.** The
+  far end polled a refused port for hours while every configuration read looked correct.
+- A service **acknowledged requests in seconds while every actual task it was asked to do failed.**
+  It looked healthier than a dead one.
+- A mesh-VPN `status` command reported a peer **offline while that peer was actively connected**,
+  driving three wrong diagnoses and one pointless reboot of a working machine.
+- A file-transfer utility, a message-send CLI, and a build wrapper all returned **exit 0 having done
+  nothing** (the last from a stale exit-code variable left over from an earlier command).
+
+**What actually happened.** In every case, **configuration presence — or a cheap status endpoint —
+stood in for the capability itself.** Nothing verified that the configured thing was bound, that the
+check actually executed, that the acknowledging service could perform work, or that the bytes moved.
+The signal was real; it simply was not measuring what everyone read it as measuring.
+
+This class is more expensive than a plain outage, because a visible failure earns attention
+immediately while a false green consumes attention — people debug the wrong box, reboot healthy
+machines, and trust a stale verdict indefinitely.
+
+**The rule.**
+
+- Ask **"what would be observably true if this were actually working?"** — then observe *that*.
+  Probe the data path: request the endpoint, re-read the artifact inside the running container, diff
+  the served asset, count the rows. Not the status that claims it.
+- **Never accept a liveness or status API as proof of liveness.** It is a claim, not a measurement.
+  Prove it with the path you actually depend on.
+- **A cached verdict must carry its own timestamp, and consumers must check it.** "Green" with no
+  freshness is unfalsifiable.
+- When you *build* something that answers requests: **self-test the advertised capability at startup
+  and refuse to serve if it cannot deliver**, and **log the configuration it actually resolved.** One
+  such log line would have ended a multi-hour, multi-agent root-cause argument permanently — the
+  cause stayed unknown for exactly one reason: nothing recorded what the process actually got.
+
+**Why it generalises.** Every layer offers a cheap health signal, and cheap signals get adopted
+precisely because they are cheap. The gap between "the config says so" and "the capability works"
+is where the most expensive outages hide, because everything on the dashboard is green while
+nothing works.
