@@ -18,7 +18,7 @@ repo is the source of truth.
 | File | Covers |
 |---|---|
 | [`lessons/scheduling-and-autonomy.md`](lessons/scheduling-and-autonomy.md) | Self-scheduling agents, recurring runs, and how an agent can make itself invisible to its operator |
-| [`lessons/verification-and-evidence.md`](lessons/verification-and-evidence.md) | Postconditions vs. exit codes, mutable fields as false evidence, and critic agents that confidently hallucinate |
+| [`lessons/verification-and-evidence.md`](lessons/verification-and-evidence.md) | Postconditions vs. exit codes, green signals that measure nothing, mutable fields as false evidence, and critic agents that confidently hallucinate |
 | [`lessons/build-and-artifacts.md`](lessons/build-and-artifacts.md) | Why an un-built artifact is an unverified one |
 | [`lessons/shared-state.md`](lessons/shared-state.md) | Concurrent agents against shared working copies |
 
