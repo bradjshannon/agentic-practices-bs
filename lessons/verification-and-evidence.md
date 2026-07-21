@@ -140,3 +140,47 @@ machines, and trust a stale verdict indefinitely.
 precisely because they are cheap. The gap between "the config says so" and "the capability works"
 is where the most expensive outages hide, because everything on the dashboard is green while
 nothing works.
+
+---
+
+## "Received" is not "visible": two consumers, one documented sink
+
+*2026-07-21*
+
+**Symptom.** An operator asked why his instructions had been ignored. The agent checked its inbox
+file, found nothing new, and reported — twice, confidently — that the messages had never arrived.
+Then the operator asked a question that broke the story open: *if messages weren't arriving, how did
+the machine receive a task, flash a device over USB, and send the reading back?*
+
+**What actually happened.** The system had **two independent consumers** of the same message stream:
+
+- a **worker**, which acted on actionable requests and logged everything it saw to its own log file;
+- a **journaller**, which was the only thing that wrote the inbox file every convention actually read.
+
+The journaller had been dead for five days. The worker was fine — which is why executable requests
+were serviced perfectly and the channel looked healthy. But the worker's default handler for
+*human-readable* messages only logged them. So those messages were received, parsed, processed, and
+written to disk **in a file nobody reads**. Grepping the worker's log found every "missing"
+instruction verbatim. **Nothing was ever lost or dropped.**
+
+The agent's own error is worth naming separately: it *established* "the inbox file stopped growing"
+and *asserted* "the messages never arrived." Those are different claims, and it substituted the
+convenient one.
+
+**The rule.**
+
+- **If two components can consume the same input, they must write to the same sink** — or the one
+  that doesn't creates a permanent blind spot that only appears when the other dies. Make every
+  consumer journal to the canonical store, idempotently (dedupe on the message id, so a healthy
+  system doesn't double-write).
+- **A default handler that only logs is a dead end.** "We log it" is not "someone will see it."
+  Logging to a path with no reader is indistinguishable from discarding.
+- **A reader of a local cache must be able to detect that it is behind the source.** Any "nothing
+  new" that cannot tell *empty* from *disconnected* will eventually report silence during an outage
+  — and it will be believed.
+- Before concluding that input never arrived, **check every sink that could have received it**, not
+  just the one you normally read.
+
+**Why it generalises.** Fan-out to multiple consumers is standard — a worker plus an audit log, a
+processor plus a UI feed, an agent plus a transcript. The moment their sinks differ, "delivered"
+and "visible" come apart, and the gap is invisible from the side you happen to be looking at.
