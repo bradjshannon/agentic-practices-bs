@@ -33,6 +33,7 @@ the reason in a section below, since this table can only report the fact, not th
 | `mechanisms/hooks/repo_doc_guard.py` | event hook | yes |
 | `mechanisms/hooks/repo_doc_guard_test.py` | test | n/a |
 | `mechanisms/hooks/stop_gate.py` | event hook | yes |
+| `mechanisms/hooks/turn_window.py` | event hook | **no** |
 
 ## Declined, and why
 

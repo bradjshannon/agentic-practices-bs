@@ -316,3 +316,38 @@ the only evidence the check discriminates.
 **Why it generalises.** Throwaway verification scripts get no review, no test of their own, and
 are trusted precisely because you just wrote them. They are the least-examined code in any
 workflow and they gate the conclusions.
+
+## The window your check measures is itself a claim (2026-07-22)
+
+**Symptom.** Five turn-end checks had run for days, appearing to work. One of them — a per-turn
+output budget — was letting through stretches five times its limit while firing on short,
+legitimate answers.
+
+**What actually happened.** Every check needed the same thing: *what has the agent said since the
+human last spoke?* Each computed it independently, by scanning backwards for a user-role entry
+whose content is a plain string, on the sound theory that a list-shaped one is a tool result
+feeding back.
+
+But **background-task notifications are also string-content user entries.** Measured on one real
+session: **37 genuine human messages and 25 machine notifications**, every one of the 25 silently
+resetting the window. So a long stretch of narration interrupted by two task completions read as
+three short turns and never tripped the cap; the question-exemption inspected a notification
+instead of the human's actual question; and a check requiring evidence "quoted from this turn's
+tool output" scoped to a window that began mid-turn, so real evidence looked absent.
+
+The checks were correct. Their **frame of reference** was wrong, and nothing about a wrong window
+looks wrong — the numbers it produces are all internally consistent.
+
+**The rule.** When several checks share a notion of scope — a turn, a window, a session, a run —
+**derive it once, in one place, and test that derivation against real data.** Independently
+reimplemented scope is not redundancy; it is the same bug copied N times, and it hides because
+every copy agrees with every other.
+
+Test it by *counting the boundaries it finds* against boundaries you can verify by another route,
+not by checking that it returns something plausible. "37 human vs 25 machine" is the finding; "the
+function returns a window" is not.
+
+**Why it generalises.** Any measurement carries an implicit claim about what it measured over.
+Time-series bucketing, rate limits per "request", cost per "session", tests per "run" — the
+metric gets scrutinised and the denominator almost never does. A wrong denominator is invisible
+precisely because it is not the number anyone is looking at.
