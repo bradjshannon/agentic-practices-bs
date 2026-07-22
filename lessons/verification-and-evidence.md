@@ -184,3 +184,81 @@ convenient one.
 **Why it generalises.** Fan-out to multiple consumers is standard — a worker plus an audit log, a
 processor plus a UI feed, an agent plus a transcript. The moment their sinks differ, "delivered"
 and "visible" come apart, and the gap is invisible from the side you happen to be looking at.
+
+---
+
+## A gate that stops early reports absence of evidence as evidence of absence
+
+A test suite had two modules that failed to *import*. The runner's default on a collection
+error is to abort the entire run. So a freshly-written gate script ran the suite, saw two
+errors, never executed the other ~520 tests, and reported **"no new breakage."**
+
+The gate reproduced, inside itself, the exact failure class it had been written to prevent.
+It was caught only because the baseline it printed looked implausibly small.
+
+Generalisation: **any tool that can stop early will, one day, stop early and still report.**
+Before trusting a checker, ask what it does when it cannot finish — and confirm the count of
+things it actually examined, not just its verdict. A summary line is a claim; the count is a
+measurement.
+
+Practical: run the checker once against a deliberately broken input and confirm it both
+*names the offender* and *exits non-zero*. Piping through `tail` will happily show you the
+word FAIL while `$?` reports the exit status of `tail`. If the exit code is what a hook will
+consume, then the exit code is the postcondition — test that, not the printed text.
+
+## Nobody assembles the same subset twice
+
+Two changes shipped claiming "gates green," each backed by a hand-picked handful of test
+files. Both picks covered files related to the change. Both missed a test that had been
+failing for eighteen hours, in an area neither author was thinking about.
+
+This is not laziness, and telling people to "run the full suite" does not fix it. When no
+single command exists, **assembling your own subset is the default**, and a self-assembled
+subset always covers what you were already thinking about — which is precisely the region
+where you are least likely to be surprised.
+
+The fix is one command that takes no arguments and admits no judgement.
+
+The complication is that real suites are rarely green, and **a gate that can never pass gets
+bypassed within a day** — which is strictly worse than no gate, because now there is a
+ritual that means nothing. So: write the accepted failures into a file, and have the gate
+fail only on failures *outside* that file. This inverts the default in a useful way. An
+ambient failure must be consciously typed in by a human, so "it was already broken" becomes
+a claim with a paper trail rather than a shrug. Have the gate also report entries that have
+started passing, so the list cannot quietly grow into permission to stay red.
+
+## Commit style is not provenance
+
+In a repository where one identity commits everything — a solo operator, or a human whose
+agents commit under their name — `git blame` carries no information about who wrote a line.
+That much is usually known.
+
+The subtler trap: **commit-message *style* is equally null.** Agents write polished
+conventional-commit subjects precisely because the repository convention tells them to. A
+tidy `fix(scope): ...` history is evidence that a convention exists, not that a human
+deliberated.
+
+What actually resolves authorship is content only a specific author could — or could not —
+have produced. One reviewer settled a disputed file instantly: it hard-coded a wake word in
+a language he does not speak. That single fact outweighed every git signal available.
+
+Two reliable tells that a file was generated rather than authored: it arrives inside a commit
+whose subject is about something else entirely, and it contains a value copied from the wrong
+side of the source it was written against — a constant lifted from the code path that *runs
+after* the thing it is supposed to trigger.
+
+## A record without its context is not evidence
+
+An operator rejected a log-based finding with one question: *which firmware, which
+configuration version, and which build of the server produced these rows?*
+
+The finding was drawn from six-week-old records in a system whose configuration is edited in
+place and whose code had changed repeatedly underneath the data. Nothing in the rows recorded
+any of that. So the records could not distinguish "current behaviour" from "behaviour of a
+build that no longer exists," and the conclusion was anecdote wearing the costume of evidence.
+
+The discipline: for any claim resting on historical records, state the version of every layer
+that produced them. Where an identifier is edited in place — an agent, a prompt, a config
+row — that identifier is **not** a version; hash the content if you need identity. When you
+cannot establish the stack, say the finding is *uncorrelated* and scope it to the window you
+can vouch for. A correctly-scoped narrow claim beats a broad one you cannot defend.
