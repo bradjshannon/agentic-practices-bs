@@ -17,6 +17,7 @@
 | `SessionStart` | `*` | `pending_instructions.py` | yes | `settings.json` |
 | `Stop` | `*` | `evidence_with_claim.py` | yes | `settings.json` |
 | `Stop` | `*` | `output_budget.py` | yes | `settings.json` |
+| `Stop` | `*` | `pacer_armed.py` | yes | `settings.json` |
 | `Stop` | `*` | `requirement_before_mechanism.py` | yes | `settings.json` |
 | `Stop` | `*` | `workflow_output_to_repo.py` | yes | `settings.json` |
 
@@ -31,6 +32,7 @@ the reason in a section below, since this table can only report the fact, not th
 | `mechanisms/hooks/evidence_with_claim_test.py` | test | n/a |
 | `mechanisms/hooks/hook_log.py` | library/CLI | n/a |
 | `mechanisms/hooks/hook_rollup.py` | library/CLI | n/a |
+| `mechanisms/hooks/pacer_armed.py` | event hook | yes |
 | `mechanisms/hooks/pending_instructions.py` | event hook | yes |
 
 ## Declined, and why

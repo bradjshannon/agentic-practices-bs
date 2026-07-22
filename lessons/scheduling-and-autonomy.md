@@ -77,3 +77,42 @@ a default within two hands-offs.
 **Why it generalises.** Self-scheduling converts a guess made once into a decision made with
 current information, every cycle. The failure mode it replaces — a fixed timer firing into an
 empty queue — is one of the most common ways autonomous systems burn budget while looking busy.
+
+## The wake-up mechanism gets dropped exactly when it looks redundant (2026-07-22)
+
+**Symptom.** An unattended run sat **idle for 7.1 hours** — measured from its own hook log,
+04:02 → 11:09 — and neither the agent nor the operator noticed until the operator asked what
+had been accomplished. Nothing crashed. Nothing wedged. The run had simply stopped.
+
+**What actually happened.** An agent is re-invoked by exactly two things: a message from the
+human, or a background task completing. A self-scheduled timer ("the pacer") exists precisely to
+guarantee the second one. It had been armed repeatedly through the early part of the run — and
+then arming lapsed, and the run's last timer fired at 03:21 with nothing armed after it. When
+the human stopped messaging, nothing remained that could wake the agent.
+
+The reason it lapsed is the whole lesson, and it is not carelessness: **arming stopped while the
+human was actively conversing.** Every reply was waking the agent anyway, so re-arming felt
+redundant on each individual turn — and the judgement was locally correct every time. The
+mechanism was abandoned exactly when its perceived value was lowest, which was immediately
+before it became the only thing that could wake the run.
+
+**The rule.** Any control whose perceived value is **lowest right before it is needed** cannot
+be left to judgement, no matter how well understood it is. Note that this run's own standing
+instructions already described the timer as "the backstop for the yield-and-stall failure" — it
+was documented, understood, and dropped anyway.
+
+The enforceable form: refuse to end a turn when nothing is scheduled to wake the run. A hook
+cannot arm the timer itself — what re-invokes the agent is the completion of a task the *agent*
+created — but it can block the turn from ending unarmed, which converts "remember to re-arm"
+into "the turn does not end until you have."
+
+Make *armed* a **timestamp, not a flag**: record when the timer will fire, and treat a time in
+the past as unarmed. A killed or already-fired timer then reads as unarmed automatically, so
+there is no stale state that can rot into a false "yes, something will wake you," and no cleanup
+step to forget. (`mechanisms/hooks/pacer_armed.py`.)
+
+**Why it generalises.** This is the general failure of any safety net used by a system that
+usually has another one: the redundant path atrophies while the primary is healthy, and its
+absence is discovered only when the primary stops. The specific agent version is nastier than
+most, because an idle agent produces no error, no log line, and no alert — the failure's only
+symptom is silence, and silence is what a working agent looks like between turns.
