@@ -60,6 +60,17 @@ That is deliberate, and it is the cheaper design:
   overnight run is noise on an interactive one. Adoption should be a judgement, made per
   machine, with the option to decline.
 
+**Which is why every machine keeps a report: [`installed/`](../installed/).** Brad, 2026-07-22:
+*"every conductor should have a log in the repo stating what it's using, what it's not using,
+how those things are implemented, and where its files live."* `tools/report-installed.py`
+generates `installed/<HOST>.md` by reading that machine's LIVE config -- which hooks are wired,
+to which event, pointing at which file, and whether the file is actually there (a wired hook
+whose file is missing shows up as MISSING, loudly). The half that cannot be derived -- what was
+declined and why, and any non-standard paths -- is written by hand and preserved verbatim across
+regenerations, so regenerating never destroys judgement.
+
+Run it after changing your hook wiring; `--check` exits non-zero when the report has drifted.
+
 The corollary is the thing to watch: **an entry here is not in force anywhere.** Do not read the
 presence of a file in this directory as evidence that the failure it addresses is handled on
 your machine — check your own config for the wiring.
