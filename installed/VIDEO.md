@@ -34,6 +34,8 @@ the reason in a section below, since this table can only report the fact, not th
 | `mechanisms/hooks/hook_rollup.py` | library/CLI | n/a |
 | `mechanisms/hooks/pacer_armed.py` | event hook | yes |
 | `mechanisms/hooks/pending_instructions.py` | event hook | yes |
+| `mechanisms/hooks/repo_doc_guard.py` | event hook | yes |
+| `mechanisms/hooks/repo_doc_guard_test.py` | test | n/a |
 
 ## Declined, and why
 
