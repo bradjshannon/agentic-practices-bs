@@ -262,3 +262,57 @@ that produced them. Where an identifier is edited in place — an agent, a promp
 row — that identifier is **not** a version; hash the content if you need identity. When you
 cannot establish the stack, say the finding is *uncorrelated* and scope it to the window you
 can vouch for. A correctly-scoped narrow claim beats a broad one you cannot defend.
+
+## A control contaminated with the treatment agrees with it, and proves nothing (2026-07-22)
+
+**Symptom.** An agent reported a failing test as "pre-existing on the main branch, unrelated
+to my change," and said it had verified this by swapping in main's files and re-running. That
+is the right instinct and the right check. The failure was real, the agent was diligent, and
+the conclusion was wrong: run alone afterwards, the same branch was clean.
+
+**What actually happened.** Three test runs were overlapping at that moment — two agents and
+the orchestrator. The failure was a collision between concurrent runs, not a property of any
+branch. The agent's control ran *inside the same contaminated window*, so it was subject to
+the identical interference. Treatment and control agreed **because both were poisoned**, and
+agreement between two equally-compromised measurements reads exactly like a clean result.
+
+**The rule.** A control rules out only the variables it does not share with the treatment.
+Before accepting "the control agreed," name what the control was *blind* to — anything varying
+in the environment rather than in the change under test (concurrency, clock, shared temp dirs,
+network, disk, another agent's writes) is shared by both arms and invisible to the comparison.
+Where it is cheap, re-run the treatment alone; a difference between "with everything running"
+and "alone" is itself the diagnosis.
+
+**Why it generalises.** The A/B instinct is strong and mostly right, which is what makes this
+dangerous: the shape of a well-run experiment is present, so nothing prompts a second look. It
+applies to any measurement taken in a shared environment, agents or not.
+
+## Your own throwaway check can pass while exercising nothing (2026-07-22)
+
+**Symptom.** Verifying a fix for a stored-XSS bug, a script fed a hostile payload through the
+rendering function and asserted the payload did not reach the output. It passed. The fix was
+in fact correct — but the check had proved nothing, and would have passed identically against
+the unfixed code.
+
+**What actually happened.** The function took a list of *records* and iterated its own module
+table of *items*; the script passed a fake items list, which the function ignored. It rendered
+the real page, found no payload — because the payload was never introduced — and reported
+success. **Absence of the payload and absence of the probe are the same string.**
+
+The same session hit the sibling case: a check read a log field as `entry["extra"]["event"]`
+when the logger flattened `extra` into the row, so it read `None` and reported a working
+mechanism as broken. Both directions, one root cause — the instrument was the test.
+
+**The rule.** In any check you write yourself, assert the **positive control first**: prove the
+probe arrived, then conclude about the payload. Concretely — assert the fixture appears in the
+output *before* asserting the bad thing does not. A one-line ordering change converts a check
+that can silently pass into one that cannot.
+
+Corollary: after writing a passing test, ask what would make it fail. If you cannot answer,
+you have written an assertion, not a test. Deliberately breaking the thing under test — or
+stubbing the function to a constant and confirming the suite goes red — costs seconds and is
+the only evidence the check discriminates.
+
+**Why it generalises.** Throwaway verification scripts get no review, no test of their own, and
+are trusted precisely because you just wrote them. They are the least-examined code in any
+workflow and they gate the conclusions.

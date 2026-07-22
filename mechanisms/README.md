@@ -1,0 +1,88 @@
+# mechanisms
+
+**Working machinery, not prose.** `lessons/` explains what went wrong and why; this directory
+holds the things that stop it happening — hooks, scripts, skills, wrappers, automations —
+in a form another agent can copy and run.
+
+Brad, 2026-07-22: *"I want every conductor to be able to write notes, process improvements,
+mechanisms, hooks, skills, scripts, etc. into that repo, so every other conductor can benefit
+on the next run."*
+
+## Why this exists next to `lessons/`
+
+A lesson is the **voluntary** class of control: it works only on an agent that read it,
+remembered it, and chose to act on it. Every entry in `lessons/` is therefore one step weaker
+than the mechanism it describes. `lessons/designing-the-problem-away.md` makes the argument in
+full — the short version is that a rule an agent must recall at the right moment is the
+intervention that already failed.
+
+So: **when a lesson has a machine version, the machine version belongs here, and the lesson
+should link to it.** A lesson with no mechanism is fine (some things genuinely cannot be
+enforced), but it should say so rather than leave the reader assuming one exists.
+
+## Ranking, from `lessons/designing-the-problem-away.md`
+
+Prefer the top of this list. The single test is: **does it work on an agent that never read
+any of this?**
+
+| Class | Works on an unaware agent? | Example |
+|---|---|---|
+| **Structural** — the bad state cannot be represented | yes, the commit is rejected | a doc check that fails a build |
+| **Instrumented** — the control lives in data you already read | yes | a log that states its own liveness, so "no events" cannot be read as "nothing happened" |
+| **Interrupt** — fires without your participation | yes | a pacer that re-invokes you on a timer |
+| **Guard-at-the-action** — blocks the call before it runs | yes | a PreToolUse hook rejecting a command shape that lies |
+| **Voluntary** — requires remembering | **no, expect decay** | a note-capture script; every file in `lessons/` |
+
+## What is here
+
+| Path | What it does |
+|---|---|
+| `hooks/evidence_with_claim.py` | Stop hook. A negative-existence or verification claim must be accompanied by a span quoted **verbatim from a tool result in the same turn**; the hook checks the quote is really there. You cannot satisfy it without having run the check. Ships with its tests. |
+| `hooks/pending_instructions.py` | SessionStart hook. Injects the human's outstanding instructions into context at turn 0, from every channel they use. Built after a run missed three explicit instructions that were sitting in a handoff file nothing required reading. |
+| `hooks/hook_log.py` | Append-only record of hook fires. Records that a hook fired and on what — **never** a verdict on whether it was right; validity is computed separately. |
+| `hooks/hook_rollup.py` | Reads that log and reports fires vs. overrides per hook, so a hook decaying into a nuisance is visible as data rather than as a hunch. |
+
+## This is a catalogue, not a runtime
+
+**Nothing here is meant to execute from this repo.** These are installed **case by case, where
+they earn their place** — copied into a machine's config, adapted, and wired to the event that
+should fire them. Brad, 2026-07-22: *"the mechanisms don't necessarily have to work FROM the
+repo — maybe they're installed case by case, as needed? whatever's most effective."*
+
+That is deliberate, and it is the cheaper design:
+
+- **A hook is only meaningful once wired to an event** in a specific harness. The wiring, not
+  the file, is the mechanism — so the install step cannot be skipped anyway.
+- **Machines differ.** Paths, usernames, repo layouts and which harness is in use all vary.
+  A shared checkout pretending to be portable would break silently on the machine that did not
+  write it, which is the failure mode this whole repo exists to document.
+- **Not every mechanism suits every context.** A guard that pays for itself on an unattended
+  overnight run is noise on an interactive one. Adoption should be a judgement, made per
+  machine, with the option to decline.
+
+The corollary is the thing to watch: **an entry here is not in force anywhere.** Do not read the
+presence of a file in this directory as evidence that the failure it addresses is handled on
+your machine — check your own config for the wiring.
+
+## Adopting one
+
+These were written for a specific setup and are **not** drop-in portable. Before copying:
+
+1. **Read the paths.** Several resolve repo locations or transcript directories for one
+   machine. Grep for `Documents/GitHub`, `expanduser`, and hard-coded repo names.
+2. **Wire it up.** A hook in a directory is inert — it needs an entry in the harness config
+   naming the event it fires on. A mechanism that is present but unwired is the exact failure
+   `lessons/` keeps documenting.
+3. **Run its tests if it has them, and check they can fail.** Stub the core function to a
+   constant and confirm the suite goes red before trusting a green one.
+
+## Contributing
+
+Same bar as `lessons/`: **one entry = one real failure**, dated, with the failure named. Plus
+two extra requirements, because this directory holds code:
+
+- **Say which class it lands in** (table above) and, if it is below Structural, what the
+  higher-class version would have been and why it was rejected.
+- **State what it cannot detect.** Every control here has a hole; the ones that hurt are the
+  holes nobody wrote down. `evidence_with_claim` cannot tell a *relevant* quote from an
+  irrelevant one — it proves a check was run, not that the check was the right one.

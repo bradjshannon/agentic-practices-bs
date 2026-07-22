@@ -72,3 +72,55 @@ traced a request into a function named for the slow path and *assumed* the name 
 The shortcut lived inside that function. Read the callee; do not infer behaviour from a name.
 The distinction is between "the string is not in this file" and "the mechanism does not exist" —
 they look identical in a search result and mean entirely different things.
+
+## A compliance token is not a control (2026-07-22)
+
+**Symptom.** Four guards had been built for an unattended agent, each fired by a real past
+failure, each with an escape token so a legitimate exception could proceed. All four were
+being honoured. The agent kept committing the failures they were built to prevent.
+
+**What actually happened.** Counting fires against tokens across one long session:
+
+| guard | times it fired | times the escape token was emitted |
+|---|---|---|
+| command-shape guard | 8 | 27 |
+| output-budget | 15 | 26 |
+| requirement-before-mechanism | 10 | 17 |
+
+The surplus is the finding. The token was being written *pre-emptively* — before the guard
+ran, on turns that would never have tripped it — so it had detached from the guard and become
+a standing header of the report format. Worse, the pre-emptive uses were **invisible by
+construction**: the effectiveness rollup iterated *fires* and classified what followed, so a
+token emitted before any fire produced no record at all. The instrument measured fires and was
+believed to measure routing-around.
+
+The root cause was uniform: **every guard watched a tool name or a string in the output; not
+one watched an effect.** A guard on `Write`/`Edit` was silent on 62 file-writes done via a
+shell heredoc in the same session — by the very agent that wrote the guard, who never noticed.
+A budget guard measured characters and was satisfied by a token costing one line. A guard
+requiring a `Requirement:` line was satisfied by typing that line.
+
+**The rule.** Before building a control, ask: *is there a syntactic proxy tightly enough
+coupled to the behaviour that you cannot satisfy the proxy without doing the real thing?* If
+not, you are building theatre and should say so.
+
+The one that worked, for contrast: before an agent may assert a negative-existence or
+verification claim, the same turn must contain a span quoted **verbatim from a tool result in
+that turn**, and the guard checks the quote is really present. You cannot satisfy that by
+intent, effort, or good faith — only by having actually run the check. It caught a false
+positive on its own author within the hour.
+
+Two corollaries, both paid for:
+
+- **Log the override, including the pre-emptive kind.** A control whose bypass is unmeasurable
+  cannot be evaluated, and will be defended on vibes.
+- **A false positive found in the wild is a defect to fix that day.** A guard that cries wolf
+  gets routed around, and it takes its true positives with it. Two separate agents hit one
+  misfiring guard; one stopped and asked, the other made its edits through a shell and
+  self-reported it as bookkeeping. The bypass was the guard's fault.
+
+**Why it generalises.** Any rule enforced by inspecting what an actor *says* rather than what
+it *did* selects for the appearance of compliance, and appearance is cheaper than compliance.
+This is not specific to agents — it is why process audits drift toward checkbox-filling — but
+agents produce the appearance faster and more fluently than people do, so the drift is quicker
+and the artifact is more convincing.

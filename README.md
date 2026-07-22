@@ -23,6 +23,34 @@ repo is the source of truth.
 | [`lessons/shared-state.md`](lessons/shared-state.md) | Concurrent agents against shared working copies |
 | [`lessons/designing-the-problem-away.md`](lessons/designing-the-problem-away.md) | Choosing a mechanism over a procedure, and keying on signals that survive the environment changing |
 
+## Mechanisms
+
+[`mechanisms/`](mechanisms/README.md) holds the **working machinery** — hooks, scripts, skills,
+wrappers — as opposed to the prose in `lessons/`. Every lesson here is, by construction, the
+*voluntary* class of control: it works only on an agent that read it and remembered. When a
+lesson has a machine version, that version lives in `mechanisms/` and the lesson links to it.
+
+## Who writes here
+
+**Every conductor, on every machine, on every run** (Brad, 2026-07-22: *"I want every conductor
+to be able to write notes, process improvements, mechanisms, hooks, skills, scripts, etc. into
+that repo, so every other conductor can benefit on the next run."*).
+
+This repo is the **cross-machine, cross-project** channel. It is not the same as the per-host
+`~/.claude` backup, which is a safety net for one machine's config and is invisible to the other.
+A mechanism that exists only in a backup helps nobody but its author.
+
+So the standing contract for a conductor run is:
+
+- **Read it while priming.** Clone if absent (`gh repo clone bradjshannon/agentic-practices-bs`),
+  `git pull` if present. A lesson you did not read cannot correct you.
+- **Bank before handing off.** Anything built this run that would help a *different* project or a
+  *different* machine — a hook, a script, a wrapper, a failure worth a lesson — is pushed here,
+  not left in a project repo or a machine-local config. The test is not "was it useful here" but
+  **"would the next conductor, on the other machine, want it?"**
+- **Fix in place.** If a lesson here is wrong or its tooling changed, correct it and say so; do
+  not work around it silently in one project.
+
 ## How to use this with an agent
 
 Point the agent at this repo in its standing instructions. The lessons are written as **rules
