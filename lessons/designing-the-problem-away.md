@@ -124,3 +124,43 @@ it *did* selects for the appearance of compliance, and appearance is cheaper tha
 This is not specific to agents — it is why process audits drift toward checkbox-filling — but
 agents produce the appearance faster and more fluently than people do, so the drift is quicker
 and the artifact is more convincing.
+
+## A control that makes its own goal worse (2026-07-22)
+
+**Symptom.** The operator sent two screenshots captioned *"duplicated output"* and *"triplicate
+output"*. The agent's messages were appearing in his chat two and three times over.
+
+**What actually happened.** Four turn-end checks were wired as four independent blocking hooks.
+When a hook blocks, the message it objected to **has already been rendered to the human** — the
+block only forces a rewrite, which lands beside it. Two hooks objecting in sequence produce two
+near-identical messages; three produce three.
+
+One of those four existed *solely* to reduce how much the human had to read. In its blocking
+path it was tripling it. **A control whose failure mode directly negates its own purpose is
+worse than no control** — it becomes an argument for its own removal, and it takes the other
+checks down with it when someone finally rips it out.
+
+Note what made this invisible from the inside: the agent never sees the duplicate. It emits one
+message per turn and experiences a block as a private correction. The cost falls entirely on the
+reader, who is the one person the check was protecting. Nobody in the loop could observe the
+defect except the human, and only by looking at his own screen.
+
+**The rule.** When several checks guard the same boundary, **run them as one gate that reports
+every objection together.** The agent then corrects once. This gives up nothing: each check still
+blocks, on the same rule, without the agent's cooperation — the defect was never that they block,
+it is that they blocked *serially*.
+
+The tempting alternative — make them advisory so they stop blocking — is wrong, and for a reason
+this page already documents: an advisory check is the Voluntary class, and every Voluntary
+control here has decayed with numbers to prove it.
+
+**And check the second-order effect on your own reporting.** Collapsing four hooks into one gate
+immediately made an inventory script report two live controls as "not wired," because it counted
+hooks bound directly to events. They ran on every turn. The fix that *looks* right at that point
+— re-wiring them directly — would have restored the duplication to satisfy a monitoring artifact.
+Teach the inventory about dispatchers instead.
+
+**Why it generalises.** Any system that accumulates guards one at a time gets this: each is
+locally reasonable, and the interaction cost lands on whoever consumes the output. It is the
+same shape as alert fatigue — five monitors paging separately for one incident — and the same
+fix, which is aggregation at the boundary rather than fewer checks.

@@ -81,6 +81,38 @@ _EVENTS = ("SessionStart", "PreToolUse", "PostToolUse", "Stop", "SubagentStop",
            "UserPromptSubmit", "PreCompact", "Notification", "SessionEnd")
 
 
+def dispatched_files(rows: list[dict]) -> set[str]:
+    """Hook files a WIRED dispatcher runs in-process, which are therefore also in force.
+
+    A dispatcher is one hook wired to an event that executes several checks itself. On VIDEO
+    that is `stop_gate.py`, introduced because four independently-wired Stop hooks each blocked
+    separately and made the human re-read the same message up to three times.
+
+    Without this, the coverage table reported `evidence_with_claim` and `pacer_armed` as **not
+    wired** the moment they moved behind the gate — while they still ran on every single turn.
+    That is precisely the misleading report this file exists to prevent: it would have told a
+    reader that a live control was unadopted, and the honest-looking fix (re-wiring them
+    directly) would have re-created the duplication.
+
+    Detected by reading the dispatcher's source for a list of check filenames, rather than by
+    hardcoding a name here — a hardcoded list is one more thing to drift.
+    """
+    out: set[str] = set()
+    for r in rows:
+        src = CLAUDE / "hooks" / r["file"]
+        if not r["exists"] or not src.exists():
+            continue
+        try:
+            text = src.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+        # A dispatcher names the scripts it runs as quoted "*.py" literals in a CHECKS list.
+        m = re.search(r"CHECKS\s*=\s*\[(.*?)\]", text, re.S)
+        if m:
+            out |= set(re.findall(r"[\"']([\w.-]+\.py)[\"']", m.group(1)))
+    return out
+
+
 def classify(path: Path) -> str:
     """event hook | test | library/CLI.
 
@@ -133,7 +165,7 @@ def render(rows: list[dict], notes: list[str], preserved: str) -> str:
     out.append("Which catalogue entries are wired here. **Not-wired is a legitimate choice** — record")
     out.append("the reason in a section below, since this table can only report the fact, not the why.")
     out.append("")
-    wired_files = {r["file"] for r in rows}
+    wired_files = {r["file"] for r in rows} | dispatched_files(rows)
     if not CATALOGUE.exists():
         out.append(f"> ⚠️ catalogue dir `{CATALOGUE}` not found — coverage unknown, not empty.")
     else:
