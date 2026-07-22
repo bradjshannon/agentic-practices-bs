@@ -43,9 +43,64 @@ import json
 import os
 import sys
 
-FW = os.path.expanduser("~/Documents/GitHub/iotta-firmware")
-INBOX = os.path.join(FW, "docs", "conductor-inbox.jsonl")
-NEEDS = os.path.join(FW, "docs", "needs-you.md")
+GH = os.path.expanduser("~/Documents/GitHub")
+COND = os.path.join(GH, "conductor-bs", "conductors", "iotta")
+INBOX = os.path.join(COND, "inbox.jsonl")
+NEEDS = os.path.join(COND, "needs-you.md")
+
+# Standing guidance that priming MUST cover. Brad, 2026-07-22: "Does priming include reading the
+# docs in conductor-bs and agentic best practices? It needs to."
+#
+# Listed as an INDEX, not pasted: the point is that a conductor cannot fail to know these exist
+# or which one is relevant. Pasting them would blow out turn 0 and train skimming — the same
+# volume failure the output budget exists to fight.
+#
+# Why here rather than as a line in the brief: the brief ALREADY said to pull the practices repo,
+# and a run still primed without it, because a doc instructing you to read another doc is the
+# Voluntary class. This fires whether or not the brief is read.
+# The list itself lives in the REPO, not here: `conductor-bs/PRIMING.md`. Brad, 2026-07-22:
+# "maybe just say to read all the docs in given folders, or all the docs listed in a given file,
+# so it's easy to update in the future."
+#
+# That indirection is the point. Changing what gets primed is then a one-line edit to a markdown
+# file, from either machine, with no hook change and no code review — and it propagates to every
+# machine that pulls the repo. A hardcoded list here would be a second place for the same
+# knowledge to live, i.e. a thing that drifts.
+MANIFEST = os.path.join(GH, "conductor-bs", "PRIMING.md")
+
+# Used only if the manifest is unreachable, so a missing repo degrades to something rather than
+# silently priming on nothing.
+FALLBACK_DIRS = [
+    ("conductor-bs/tactics", "conductor tactics (both machines)"),
+    ("agentic-practices-bs/lessons", "portable failure-earned lessons"),
+    ("agentic-practices-bs/mechanisms", "mechanisms catalogue"),
+]
+
+
+def _parse_manifest() -> tuple[list[tuple[str, str]], list[tuple[str, str]], str | None]:
+    """(dirs, files, note) from PRIMING.md's fenced ```primed-dirs / ```primed-files blocks."""
+    if not os.path.exists(MANIFEST):
+        return FALLBACK_DIRS, [], f"{MANIFEST} MISSING — using a built-in fallback list, which " \
+                                  "may be out of date. Clone conductor-bs."
+    try:
+        text = open(MANIFEST, encoding="utf-8", errors="replace").read()
+    except Exception as exc:
+        return FALLBACK_DIRS, [], f"could not read {MANIFEST}: {exc}"
+    out = {"primed-dirs": [], "primed-files": []}
+    for key in out:
+        marker = "```" + key
+        if marker not in text:
+            continue
+        body = text.split(marker, 1)[1].split("```", 1)[0]
+        for line in body.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            path, _, label = line.partition(" ")
+            out[key].append((path, label.strip() or "(no label)"))
+    if not out["primed-dirs"] and not out["primed-files"]:
+        return FALLBACK_DIRS, [], f"{MANIFEST} parsed to NOTHING — check its fenced blocks"
+    return out["primed-dirs"], out["primed-files"], None
 
 # Headings in needs-you.md that carry INSTRUCTIONS (things to do) rather than decisions
 # awaiting Brad. Matched case-insensitively as substrings.
@@ -96,6 +151,29 @@ def instruction_sections() -> tuple[list, str | None]:
     return out, None
 
 
+def guidance_index() -> tuple[list[tuple[str, list[str], str | None]], list[str], str | None]:
+    """(dir entries, named files, manifest note)."""
+    dirs, files, note = _parse_manifest()
+    out = []
+    for rel, label in dirs:
+        path = os.path.join(GH, rel.replace("/", os.sep))
+        if not os.path.isdir(path):
+            out.append((f"{rel} — {label}", [],
+                        "DIRECTORY MISSING — clone the repo; do not proceed as if it were empty"))
+            continue
+        try:
+            names = sorted(f for f in os.listdir(path) if f.endswith(".md"))
+        except Exception as exc:
+            out.append((f"{rel} — {label}", [], f"unreadable: {exc}"))
+            continue
+        out.append((f"{rel} — {label}", names, None if names else "empty (suspicious)"))
+    named = []
+    for rel, label in files:
+        exists = os.path.exists(os.path.join(GH, rel.replace("/", os.sep)))
+        named.append(f"{'   ' if exists else '!! MISSING '}{rel} — {label}")
+    return out, named, note
+
+
 def main() -> int:
     inbox, inote = unhandled_inbox()
     sections, snote = instruction_sections()
@@ -128,6 +206,23 @@ def main() -> int:
             print(f"      {b[:200]}")
         if len(s["body"]) > 6:
             print(f"      ... ({len(s['body']) - 6} more lines -- READ THE FILE)")
+    dir_entries, named, mnote = guidance_index()
+    print("\n-- STANDING GUIDANCE — priming MUST cover these (`git pull` both repos first) --")
+    print("   (manifest: conductor-bs/PRIMING.md — edit THAT to change what is primed)")
+    if mnote:
+        print(f"   !! {mnote}")
+    for label, files, note in dir_entries:
+        print(f"   {label}:")
+        if note:
+            print(f"      !! {note}")
+        for f in files:
+            print(f"      - {f}")
+    if named:
+        print("   named files:")
+        for n in named:
+            print(f"   {n}")
+    print("   Read the ones relevant to what you are about to do. They are short, they are")
+    print("   failure-earned, and every one exists because something went wrong without it.")
     print("=== end pending instructions ===")
     return 0
 
