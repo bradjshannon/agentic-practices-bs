@@ -6,6 +6,25 @@ that touch real infrastructure.
 Every entry here was paid for by a run that went wrong. Nothing is aspirational, and nothing
 is here because it sounded like good advice.
 
+## The boundary — public here, tactical in `conductor-bs` (enforced)
+
+This repo is **public**: theory, conceptual mechanisms, and prose with **sanitized** examples of
+mechanical implementations. It names **nothing specific** — no machine, host, operator, private IP,
+or project/product. The *real, tactical* documentation — how to install and wire a mechanism on a
+particular box, what a specific machine actually has running, anything computer- or
+project-specific — lives in the private companion repo
+[`conductor-bs`](https://github.com/bradjshannon/conductor-bs) (Brad, 2026-07-23).
+
+**This is enforced, not just asked.** CI runs [`tools/check_sanitized.py`](tools/check_sanitized.py)
+(see [`.github/workflows/sanitized.yml`](.github/workflows/sanitized.yml)) on every push and PR; a
+change that drags a specific hostname, IP, machine name, operator path, or project name into this
+repo is **rejected**. Run it locally before you push: `python tools/check_sanitized.py`. If it flags
+something, that content belongs in `conductor-bs` — move it, don't sanitize it into uselessness.
+
+The test for an entry here: *"would this help someone with a different stack entirely, naming
+nothing of mine?"* If yes, it is public. If it only makes sense on a specific machine or project,
+it is tactical, and it goes to `conductor-bs`.
+
 ## Why a repo and not just a doc
 
 A prose page is for humans. **A repo is checkout-able by an agent at run time** — it can be

@@ -1,0 +1,20 @@
+name: sanitized
+
+# Enforce the public/private boundary: this repo must never name a specific machine, host,
+# operator, private IP, or project/product. The real, tactical, machine-specific material lives
+# in the private conductor-bs repo. See tools/check_sanitized.py for the rule and the rationale.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check-sanitized:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject machine/project-specific leaks
+        run: python3 tools/check_sanitized.py
