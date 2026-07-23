@@ -116,3 +116,13 @@ usually has another one: the redundant path atrophies while the primary is healt
 absence is discovered only when the primary stops. The specific agent version is nastier than
 most, because an idle agent produces no error, no log line, and no alert — the failure's only
 symptom is silence, and silence is what a working agent looks like between turns.
+
+## A background worker can die silently — no completion signal ever arrives (2026-07-24)
+
+**Symptom.** An agent dispatched a background sub-worker, then reported "still running" for over an hour. The worker had in fact terminated almost immediately, having produced nothing — and no completion event was ever delivered.
+
+**What actually happened.** The dispatch model delivers a completion event when a worker *finishes cleanly*. A worker that dies — wedges, is killed, hits a terminal error on resume — may emit no event at all, so "no notification yet" is indistinguishable from "still working." The parent waited on a signal that would never come, and kept telling the operator the wrong thing.
+
+**The rule.** Never infer a background worker's liveness from the *absence* of a completion signal. Check its externally observable state — commits on its branch, output-file growth, working-tree mtimes — and treat "created its workspace but no progress for a long interval" as dead, not slow. When you stop one, verify it actually stopped: a stop call that reports "no such task" means it was already gone, which is itself the answer.
+
+**Why it generalises.** Any system that signals success but not silent death has its blind spot exactly where you most need visibility — the failure case. A liveness check must observe the *work*, not the *notification*, for the same reason a green status endpoint is not proof of the capability behind it.

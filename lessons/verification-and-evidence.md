@@ -351,3 +351,13 @@ function returns a window" is not.
 Time-series bucketing, rate limits per "request", cost per "session", tests per "run" — the
 metric gets scrutinised and the denominator almost never does. A wrong denominator is invisible
 precisely because it is not the number anyone is looking at.
+
+## A grep keyed on the wrong field returns nothing — which reads identically to "it never happened" (2026-07-24)
+
+**Symptom.** Diagnosing whether a server had sent audio to a client, the investigator grepped the logs for the *session UUID* and found zero send events — and nearly concluded the server never sent anything, pointing the whole diagnosis at the client hardware.
+
+**What actually happened.** The send events *were* logged — but tagged with a per-**connection** identifier, not the session UUID the grep used. The lines existed; the grep key simply did not appear on them. A second grep on the connection tag surfaced dozens of send events. The "absence" was an artifact of the correlation key, not of the events.
+
+**The rule.** Before concluding "no X in the logs," confirm the lines that *would* record X are actually tagged with the field you are grepping. Pull one known-positive first (a working sibling, an earlier success) and see which identifier its X-lines carry, *then* apply the grep. Absence of matches is evidence only once you have shown the match key appears on the events you are hunting.
+
+**Why it generalises.** Logs, metrics and traces carry several identifiers (session, connection, request, trace) and a given line usually carries only some of them. A query keyed on the wrong one is a silent false-negative that fails open into "nothing happened" — the most misleading answer a search can give, because it looks like a clean result.
