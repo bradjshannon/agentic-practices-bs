@@ -361,3 +361,37 @@ precisely because it is not the number anyone is looking at.
 **The rule.** Before concluding "no X in the logs," confirm the lines that *would* record X are actually tagged with the field you are grepping. Pull one known-positive first (a working sibling, an earlier success) and see which identifier its X-lines carry, *then* apply the grep. Absence of matches is evidence only once you have shown the match key appears on the events you are hunting.
 
 **Why it generalises.** Logs, metrics and traces carry several identifiers (session, connection, request, trace) and a given line usually carries only some of them. A query keyed on the wrong one is a silent false-negative that fails open into "nothing happened" — the most misleading answer a search can give, because it looks like a clean result.
+
+## An image is an instrument, and EXIF orientation is its calibration (2026-07-24)
+
+**What happened.** A user photographed a device whose screen was rendering mirrored text and
+reported the display as mirrored. Reading the uploaded JPEG, the agent noticed that the printed
+label and the silkscreen legend in the *same frame* also appeared mirror-imaged. Printing cannot
+mirror — so the agent concluded the camera had mirrored the whole frame, told the user their
+observation was a photographic artifact, and declined to change anything. The user pushed back
+flatly. The agent was wrong.
+
+**What actually happened.** The file carried **EXIF Orientation = 6**: the pixels are stored
+rotated, and a viewer is expected to rotate them 90° before display. The agent had read the raw
+pixel buffer, in which the label's text ran at 90°. Rotated glyphs at a glance resemble mirrored
+glyphs closely enough to fool a confident reading. Applying `exif_transpose()` first made it
+unambiguous — the printing read correctly, the screen genuinely was mirrored.
+
+**Why this one was expensive.** It did not merely produce a wrong answer; it manufactured a
+*positive control that did not exist*, and then used that fake control to overrule a correct
+human observation. The reasoning pattern was sound — "find something in the frame whose true
+orientation you already know" — which is exactly what made the conclusion feel earned. A rigorous
+method applied to a mis-calibrated instrument yields confident nonsense, and it is much harder to
+doubt than sloppy reasoning is.
+
+**The rule.** Run `ImageOps.exif_transpose()` (or the equivalent) on any photo **before** reasoning
+about orientation, handedness, mirroring or which-way-up. Treat a raw decode as an uncalibrated
+reading. When a conclusion from an image contradicts the person who was holding the object, check
+the calibration before you check them — they had the physical article in their hand and you had a
+file.
+
+**The generalisation.** Every artifact arrives with metadata that changes its meaning: image
+orientation, a timezone on a timestamp, an encoding on a byte string, a unit on a number, a
+coordinate frame on a vector. Skipping the metadata does not raise an error; it silently returns a
+plausible wrong answer. Ask what would have to be true for this decode to be *correct*, and verify
+that, before building an argument on top of it.
