@@ -45,44 +45,105 @@ audit the other hooks now carry, built after three of them were found being sati
 import json
 import os
 import re
+import subprocess
 import sys
 from datetime import datetime, timezone
 
 STATE = os.path.expanduser("~/.claude/pacer-armed.json")
 OVERRIDE = re.compile(r"pacer:\s*none\b", re.I)
 
+# Repo roots where the conductor runs — enforcement is scoped to these.
+# Checked as path prefixes against the cwd written by turn-pacer.py when it arms.
+# A pacer armed in an unrelated project does NOT count as armed for a conductor session,
+# and a conductor-less session does NOT need a pacer at all.
+_HOME = os.path.expanduser("~")
+CONDUCTOR_ROOTS = [
+    os.path.join(_HOME, "Documents", "GitHub", "conductor-bs"),
+    os.path.join(_HOME, "Documents", "GitHub", "iotta-bs"),
+    os.path.join(_HOME, "Documents", "GitHub", "iotta-firmware"),
+]
 
-def armed_for() -> float | None:
-    """Seconds until the pacer fires, or None if nothing is armed."""
+
+def _in_conductor_context() -> bool:
+    """Return True if the currently armed pacer was launched from a conductor repo."""
     try:
         with open(STATE, encoding="utf-8") as fh:
-            fires_at = datetime.fromisoformat(json.load(fh)["fires_at"])
+            cwd = json.load(fh).get("cwd", "")
+    except Exception:
+        return False  # no state file → no conductor session active
+    cwd = os.path.normpath(cwd)
+    return any(cwd.startswith(os.path.normpath(r)) for r in CONDUCTOR_ROOTS)
+
+
+def _pid_alive(pid: int) -> bool:
+    """Is that process actually still there? Best-effort and FAIL-OPEN: if we cannot tell, we
+    say yes, because wrongly declaring a live pacer dead would block every turn end."""
+    if not pid:
+        return True  # older breadcrumb without a pid — cannot check, do not punish
+    try:
+        if os.name == "nt":
+            out = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {int(pid)}", "/NH"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if out.returncode != 0:
+                return True  # cannot tell
+            return str(int(pid)) in (out.stdout or "")
+        os.kill(int(pid), 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except Exception:
+        return True  # cannot tell -> assume alive
+
+
+def armed_for() -> float | None:
+    """Seconds until the pacer fires, or None if nothing is armed.
+
+    ⚠️ `fires_at` ALONE IS NOT ENOUGH, and the docstring above this file used to claim it was
+    ("a pacer that already fired, or was killed, leaves `fires_at` in the past"). That is false
+    for a KILLED pacer: the breadcrumb is written when the pacer starts, with `fires_at` set in
+    the future, and nothing removes it if the process dies before firing. Measured 2026-07-24 at
+    wind-down — three pacers were killed mid-sleep, `pacer-armed.json` still named a future
+    `fires_at` and pid 6856, and that pid was gone (verified against a positive control: the
+    same query saw 7 live python processes and its own pid).
+
+    That is a FALSE ALLOW in the direction that matters: this hook exists to stop a turn ending
+    with nothing scheduled to wake the run, and it was doing the opposite — certifying a dead
+    pacer as armed. The cost of the failure it guards is already on record: a 7.1-hour silent
+    idle on 2026-07-22.
+
+    So the timestamp is now corroborated against the recorded pid. Fail-open on any uncertainty,
+    because a false DENY blocks every turn end and would get the guard disabled outright, taking
+    its true positives with it.
+    """
+    try:
+        with open(STATE, encoding="utf-8") as fh:
+            state = json.load(fh)
+        fires_at = datetime.fromisoformat(state["fires_at"])
     except Exception:
         return None
     delta = (fires_at - datetime.now(timezone.utc)).total_seconds()
-    return delta if delta > 0 else None
+    if delta <= 0:
+        return None
+    if not _pid_alive(state.get("pid") or 0):
+        return None  # breadcrumb says armed, process is gone -> nothing will wake this run
+    return delta
 
 
 def turn_text(transcript_path: str) -> str:
+    """The assistant's text this turn — where an override token (`pacer:none`) would be.
+
+    Delegates to the shared window so the turn boundary excludes machine notifications; the
+    old local scan started the window at any string-content user entry, including a
+    <task-notification>, and read the wrong text for the token.
+    """
     try:
-        with open(transcript_path, encoding="utf-8", errors="replace") as fh:
-            entries = [json.loads(line) for line in fh if line.strip()]
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from turn_window import turn as _turn
+        return _turn(transcript_path)["said"]
     except Exception:
         return ""
-    start = 0
-    for i in range(len(entries) - 1, -1, -1):
-        c = (entries[i].get("message") or {}).get("content")
-        if entries[i].get("type") == "user" and isinstance(c, str) and c.strip():
-            start = i
-            break
-    out = []
-    for e in entries[start:]:
-        c = (e.get("message") or {}).get("content")
-        if isinstance(c, list):
-            for b in c:
-                if isinstance(b, dict) and b.get("type") == "text":
-                    out.append(b.get("text") or "")
-    return "\n".join(out)
 
 
 def _log(event: str, trigger: str, transcript: str) -> None:
@@ -102,6 +163,11 @@ def main() -> int:
         return 0
 
     if payload.get("stop_hook_active"):
+        return 0
+
+    # Only enforce in conductor sessions. If the state file's cwd is not under a
+    # conductor repo (or has no cwd field yet), this session doesn't need a pacer.
+    if not _in_conductor_context():
         return 0
 
     transcript = payload.get("transcript_path") or ""
