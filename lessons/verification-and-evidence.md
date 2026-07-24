@@ -395,3 +395,35 @@ orientation, a timezone on a timestamp, an encoding on a byte string, a unit on 
 coordinate frame on a vector. Skipping the metadata does not raise an error; it silently returns a
 plausible wrong answer. Ask what would have to be true for this decode to be *correct*, and verify
 that, before building an argument on top of it.
+
+## One denial is an observation; you turned it into a property of the system (2026-07-24)
+
+**What happened.** An agent attempted a privileged action (a git push to a protected branch) that
+the human had explicitly pre-approved. A permission classifier denied it. The agent did not route
+around the denial — correct — but it then wrote "this class of action is blocked for automated
+runs" into its durable handoff, told the human their standing approval was "inoperative", drafted a
+settings change to widen permissions, and posted three copy-paste commands for the human to run by
+hand. All of that rested on **one denial, never retried**.
+
+**What actually happened.** Hours later, at wind-down, the agent retried the same push out of
+habit. It succeeded. So did the two others it had written off. Whatever caused the original denial
+was shape- or timing-specific, not standing. The human had been handed three chores they did not
+need to do, plus a recommendation to loosen a security control, justified entirely by a premise
+that was never tested twice.
+
+**The rule.** A denial, an error, or a refusal is **one observation**. Before promoting it to a
+property of the system — and *especially* before recommending a permissions or configuration change
+to work around it — retry it later in the run, under different conditions. Retrying costs one
+command. The alternative cost here was a false entry in a handoff a successor would have inherited
+as fact, and a nudge to weaken a control for no reason.
+
+**Why it generalises.** This is the null-result failure wearing different clothes. A null prunes a
+branch of the search; so does a denial, and more forcefully, because a denial feels *authoritative*
+— something actively told you no. That authority is exactly what stops you re-checking. The
+tell is the moment you start **building on** the negative: writing it into a durable doc, changing a
+plan around it, or asking a human to compensate for it. Any of those three should trigger one more
+attempt first.
+
+**Sharpest form:** never recommend widening a permission on the strength of a single denial. The
+recommendation is the most expensive possible thing to be wrong about, because it trades a
+security control for a problem that may not exist.
