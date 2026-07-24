@@ -427,3 +427,60 @@ attempt first.
 **Sharpest form:** never recommend widening a permission on the strength of a single denial. The
 recommendation is the most expensive possible thing to be wrong about, because it trades a
 security control for a problem that may not exist.
+
+## A confirmation that shares the action's assumption confirms nothing (2026-07-24)
+
+**What happened.** A deploy script uploaded firmware to a server, then verified the upload by
+asking the same CLI to list what had been uploaded. It printed the image back. Exit 0. Green all
+the way. Devices never received the image, for days, across more than one operator session.
+
+**What actually happened.** The write went to the CLI's *default* directory. The server read a
+different directory, pinned in its own config. The verification used **the same CLI with the same
+default**, so it faithfully confirmed that the bytes were where the writer had put them — which
+was never the question. Stale files from an earlier session were already sitting in the wrong
+directory, so someone had hit this before and been reassured by the same check.
+
+**The rule.** A verification must be reachable only through a path the action does **not**
+control. Ask the *consumer* whether it can see the result — the server, the device, the endpoint
+that will actually use it — not the producer whether it thinks it wrote it. If the check and the
+action share a config value, a default, a base path or a client library, the check can only ever
+confirm internal consistency.
+
+**The tell.** Write the check and then ask: *what would have to be different for this to fail?* If
+the honest answer involves only things inside the thing you just ran, it is a tautology with a
+green tick. In the case above the fix was to ask the running server, through its own configuration,
+whether it now offers the release — and to fail the push when it does not.
+
+**Why it generalises.** This is the shape behind most "ships, succeeds, delivers nothing" defects:
+uploads confirmed by re-reading the uploader's own store, caches validated by the writer, messages
+"sent" per the sender's log, migrations verified with the same ORM that wrote them. The failure is
+never noisy, because every component involved is working exactly as designed.
+
+## An existence check standing in for a liveness check (2026-07-24)
+
+**What happened.** A device's secondary control channel would die and never come back for the
+remainder of a boot, leaving the device reporting itself connected and healthy while every remote
+command silently went nowhere. Recovery required physically power-cycling the hardware. It
+happened to two separate devices before the cause was found.
+
+**What actually happened.** The reconnect path was guarded by `if (!channel_ptr)` — a null check
+on the transport object. The pointer was assigned once, when the channel was first created, and
+was **never reset anywhere**. So the guard read "have we ever opened this channel", while the code
+around it needed "is this channel currently up". Before the first open the two agree; forever
+after, they cannot.
+
+**The rule.** Never let the *presence of a handle* stand in for the *health of what it points at*.
+A pointer, a file descriptor, a session object, a cached client — all answer "was this ever
+constructed", which is a different question from "does it work right now", and they diverge
+precisely when something has gone wrong. Track liveness as its own state, updated by the events
+that change it (open/close, connect/disconnect), and reconcile it against reality on a timer.
+
+**The tell in review.** A recovery path guarded on the existence of the thing it recovers is
+almost always wrong, and reads as obviously correct: `if (!x) recreate(x)` looks like exactly the
+right shape. Ask what sets it back to null. If the answer is "nothing", the recovery is dead code
+after its first success — the most expensive kind, because it was demonstrably exercised once.
+
+**Related hazard.** The naive fix — recreate on every reconnect — can collide with a retry engine
+the underlying library already runs, which is its own documented outage class. Correct recovery had
+to distinguish three states the original collapsed into one: never opened, open and healthy, and
+dead with its own retry exhausted.
