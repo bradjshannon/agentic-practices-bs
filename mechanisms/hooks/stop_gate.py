@@ -58,6 +58,7 @@ CHECKS = [
     "evidence_with_claim.py",
     "output_budget.py",
     "pacer_armed.py",
+    "context_ledger.py",
 ]
 
 
@@ -109,9 +110,25 @@ def main() -> int:
         # surfaced on the next real block so they cannot rot silently either.
         return 0
 
-    parts = [f"{len(reasons)} turn-end check(s) objected. **All of them, so you rewrite ONCE** — "
-             "each separate block costs Brad a full re-read of a message he has already seen, "
-             "which is how three hooks turned one message into three.\n"]
+    # ⚠️ REPLY WITH THE DELTA, NOT THE MESSAGE AGAIN.
+    #
+    # This banner used to say "All of them, so you rewrite ONCE" — which correctly named the harm
+    # (Brad re-reading a message he has already seen) and then prescribed the thing that causes
+    # it. An agent reading "rewrite" rewrites the whole message, so he reads two near-identical
+    # versions. He caught it with a screenshot: two paragraphs boxed in red, near-verbatim, and
+    # "why are you doing this".
+    #
+    # Blocking a Stop is inherently expensive this way: the original has ALREADY been shown. The
+    # forcing function is still worth keeping — an unmet check must not be endable-past — but the
+    # response has to be the missing element ALONE. Say the quote, the requirement line, the
+    # token. Do not restate what he just read.
+    parts = [f"{len(reasons)} turn-end check(s) objected.\n\n"
+             "**Reply with ONLY what was missing — a sentence or two.** He has ALREADY SEEN your "
+             "message; restating it makes him read the whole thing twice, which is the entire "
+             "cost of a Stop block. Add the evidence quote / the `Requirement:` line / the "
+             "override token as a short addendum and stop. Do NOT rewrite the message, do not "
+             "re-summarise what you did, do not re-list the same findings.\n\n"
+             "If several checks objected, satisfy them all in that one short addendum.\n"]
     for i, (name, reason) in enumerate(reasons, 1):
         parts.append(f"\n───── {i}. {name} ─────\n{reason}")
     if errors:
