@@ -484,3 +484,44 @@ after its first success — the most expensive kind, because it was demonstrably
 the underlying library already runs, which is its own documented outage class. Correct recovery had
 to distinguish three states the original collapsed into one: never opened, open and healthy, and
 dead with its own retry exhausted.
+
+## A health check that perturbs what it checks, and a recovery that destroys before it rebuilds (2026-07-24)
+
+**What happened.** A display would go dark and stay dark after a transient bus fault, so a
+periodic self-heal was added: every 5 s, re-run the panel's full initialisation sequence. The
+operator then reported the display cycling **on ~4 s, off ~4 s** — a strobe far more obnoxious
+than the original fault. His words: *"that's a weird fix."*
+
+**What actually happened.** Two defects, compounding.
+
+First, the init sequence *begins by turning the display off* and ends by turning it on, with every
+step chained by short-circuiting `&&`. A failure anywhere in the middle meant the final
+display-on never executed — so each failed attempt left the panel dark until the next successful
+one, a full period later. Measured failure rate was ~50% (45 ok / 45 fail), which is exactly the
+observed duty cycle.
+
+Second, and more fundamental: the check ran **unconditionally**. A perfectly healthy panel was
+being torn down and rebuilt every 5 s to find out whether it was healthy.
+
+**The rules.**
+
+1. **A health check must not perturb what it checks.** If verifying a thing requires disturbing
+   it, you have built a stress test, not a monitor. Probe non-destructively (does it acknowledge?)
+   and act only on a negative result.
+2. **A recovery path that destroys state before rebuilding it must reach a good state even when
+   it fails partway.** Short-circuit evaluation is the usual culprit: the teardown step always
+   runs, the restore step is conditional on everything before it succeeding. Ensure the restoring
+   action executes unconditionally, or make the whole sequence atomic.
+3. **Before/after matters more than the fix being "correct".** Without the self-heal, a dark
+   display stayed dark — bad, but static and diagnosable. With it, the failure became periodic and
+   dramatic. Ask what the failure mode looks like *after* your change, not just whether the change
+   addresses the original complaint.
+
+**Why it generalises.** The pattern is any recover-by-reinitialising loop: reconnecting a
+connection that was fine, restarting a worker to see if it responds, clearing a cache to test it,
+re-authenticating on a timer. Each converts a rare fault into a steady drumbeat of self-inflicted
+outages, and each looks like diligence in review.
+
+**The tell.** If your recovery routine runs on a timer regardless of state, ask what it costs when
+nothing is wrong. If the answer is "it briefly breaks the thing", it will be breaking it forever,
+because most of the time nothing is wrong.
