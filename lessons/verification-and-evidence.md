@@ -525,3 +525,45 @@ outages, and each looks like diligence in review.
 **The tell.** If your recovery routine runs on a timer regardless of state, ask what it costs when
 nothing is wrong. If the answer is "it briefly breaks the thing", it will be breaking it forever,
 because most of the time nothing is wrong.
+
+---
+
+## Read the convenient copy, get the past; ask the source, get the present (2026-07-26)
+
+*2026-07-26*
+
+**Symptom.** Four confident wrong conclusions in one session, each from a different subsystem, all
+the same mistake — and two of them produced work that had to be undone.
+
+**What actually happened.** Each time, a *derived or partial copy* of the truth was read as if it
+were the truth:
+
+| the copy | what it said | the source said |
+|---|---|---|
+| a device's cached `health` snapshot | `oled_reassert_fail: 0` | asking the device: **65**, and 7 hours had passed |
+| a ~200-char preview of a human's message | it ended mid-sentence | the stored message was 347 chars and complete |
+| `grep -c $'\r'` under Git Bash | "225 CRLF lines" | reading bytes in Python: **0** |
+| a stale `connected` flag | device online | the device had been silent 90 minutes |
+
+The cached-health one caused a live defect to be *retired* as fixed. The truncated-preview one was
+worse: from a message that appeared to stop mid-sentence, the agent inferred a data-loss bug that
+had never happened, wrote that inference into a commit message, and rebuilt a working keyboard
+handler around it — while the bug the human *actually* reported went unfixed for three more passes.
+
+**The rule.** Before acting on a reading, ask **"is this the source, or a copy of it?"** A cache, a
+preview, a snapshot, a summary and a convenience wrapper are all copies. Copies are fine for
+orientation and lethal for diagnosis. If a live source exists — the device itself, the stored file,
+the raw bytes — pay the one extra call.
+
+**Corollary, the actionable half:** *build the copies so they cannot be mistaken for the source.*
+Truncation is fine; truncation that looks complete is not. A preview must carry its own length
+(`text: 795 chars NOT SHOWN`), a snapshot must carry its age, a truncated list row must say
+`…+139ch`. Best of all, remove the copy from the pipeline when the full read is one command away —
+which is what the human proposed when he saw it: *"have the hook NOT provide a preview of the data,
+except maybe an identifier or timestamp, and instead provide the command you should use for the
+complete read."*
+
+**Why it generalises.** Every system grows caches and summaries because they are cheap, and every
+one of them is a place where time can pass unnoticed. The failure is not that copies exist; it is
+that a copy and its source are *syntactically identical* at the point of reading, so nothing
+prompts the question.

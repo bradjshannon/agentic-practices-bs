@@ -42,3 +42,34 @@ stopped anyone from running the build was never re-derived, so two latent defect
 **Why it generalises.** Every "we designed it but couldn't run it" artifact carries unknown
 execution defects, and the count is rarely zero. The gap between reviewed and executed is where
 this class of bug lives, and it is invisible in a diff.
+
+---
+
+## Author non-trivial file edits from a script file, not a shell heredoc (2026-07-26)
+
+*2026-07-26*
+
+**Symptom.** Three separate edits corrupted in one session. Two broke live tooling: one left a
+status page unable to render, and one broke a `PreToolUse` hook that gates *every* shell call in
+the session.
+
+**What actually happened.** Each edit was applied with a Python one-liner inside a shell heredoc,
+where the replacement text contained shell-significant characters. The shell interpreted them
+before Python ever saw the string. In the worst case the replacement text mentioned `$'\r'` — the
+ANSI-C quote for a carriage return — as *documentation of a bug*, and the shell helpfully expanded
+it into a real newline, splitting a Python comment across two lines and producing
+`SyntaxError: unterminated string literal` in the guard that every subsequent command had to pass.
+
+The reflex fix is to escape more carefully. That is the wrong lesson: the same trap fired three
+times *in a session where the agent already knew about it*.
+
+**The rule.** For any edit whose replacement text contains quotes, backslashes, `$`, backticks or
+newlines, **write a small script file and run it** — or use a structured edit tool. Do not pipe the
+content through a shell. The shell is an interpreter you did not intend to invoke, and its
+interpretation happens silently and before yours.
+
+**Why it generalises.** This is the standard shape of "remove the path rather than police it." The
+content most likely to be mangled is exactly the content that *documents* mangling — escape
+sequences, regexes, quoting rules — so the failure concentrates in the commits explaining the
+problem. And the blast radius is set by what you happened to be editing: a doc, or the guard
+protecting the rest of the run.
