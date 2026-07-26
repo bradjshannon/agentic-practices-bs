@@ -567,3 +567,31 @@ complete read."*
 one of them is a place where time can pass unnoticed. The failure is not that copies exist; it is
 that a copy and its source are *syntactically identical* at the point of reading, so nothing
 prompts the question.
+
+---
+
+## "Ahead by N commits" is a statement about objects, never about content
+
+*2026-07-26*
+
+**Symptom.** Told that a branch was seven commits ahead of `main`, an agent reported seven commits
+of stranded work and briefed a merge to rescue it. The subagent it briefed checked `git patch-id`
+first: **six of the seven were already on `main` verbatim** under different shas, carried forward
+by earlier rebases, and the seventh had landed as a deliberate cherry-pick. The merge was real
+mechanically and a no-op in content.
+
+**What actually happened.** `git rev-list base..branch` answers exactly one question — which commit
+*objects* are reachable from one ref and not the other — and it answered correctly. The question
+that mattered was about *content*, and cherry-pick and rebase produce new objects carrying the same
+patch. A true answer to the first question is a false answer to the second.
+
+**The rule.** **"Ahead by N" measures commit identity, not content.** Before treating a branch as
+unmerged work, ask `git cherry <base> <branch>` or compare `git patch-id`; before deleting a branch,
+the same. If a merge produces no content change, say so rather than reporting a rescue.
+
+**Why it generalises.** This is a tool whose *vocabulary* encodes the wrong reading. Git says
+"ahead", GitHub's UI says "N commits ahead", and *ahead* means "has work the other lacks" in every
+ordinary use of the word — but the number is computed on object identity. That makes the misreading
+the one the interface suggests, not an idiosyncratic slip. The general form: when a tool's label
+and its computation answer different questions, the label wins in the reader's head. Treat
+confidently-named metrics as claims about their computation, not about their name.

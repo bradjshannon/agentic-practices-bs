@@ -164,3 +164,34 @@ Teach the inventory about dispatchers instead.
 locally reasonable, and the interaction cost lands on whoever consumes the output. It is the
 same shape as alert fatigue — five monitors paging separately for one incident — and the same
 fix, which is aggregation at the boundary rather than fewer checks.
+
+---
+
+## A blocker that is expected and intended does not end the investigation
+
+*2026-07-26*
+
+**Symptom.** Asked "how far is this from being usable by a stranger?", two agents adopted a
+stranger's persona, attempted the real path, hit a private-repo authentication wall, and reported
+"blocked" as the finding. The owner's reply: *"yeah, it's private, i know. that's not helpful...
+agents assigned to 'test' the process shouldn't stop thinking through the process because it's
+blocked today. of course it's blocked today!"*
+
+**What actually happened.** The brief said *attempt the path rather than reading it* — good
+instruction, and it produced excellent findings right up to the wall. But the wall was a **known,
+intended, temporary** condition, and nothing told the agents to model past it. So the most
+expensive question — what still fails *after* the blocker is removed — went unanswered, and the
+report read as thorough while missing its own point. Re-briefed with "assume it is public; that is
+a given, not a question", the same investigation found a structural defect that publication would
+**not** have fixed: a package whose build reaches outside itself for its own sources.
+
+**The rule.** When empirical testing is blocked by a condition that is expected to change, **say so
+in the brief and require the model-it-anyway path.** Name which findings are reasoned rather than
+executed. A blocker that everyone already knows about is not a finding; what survives its removal
+is.
+
+**Why it generalises.** "Test it for real" is normally the right instinct and is why this fails —
+the agent believes it is being rigorous while stopping at the first wall. Pre-release software,
+unprovisioned infrastructure, an unsigned certificate, a feature flag that is off: in each case the
+present-tense blocker is the least interesting fact available, and the valuable answer is one layer
+behind it. Ask "what is still broken once this is fixed?" as a separate, explicit question.
