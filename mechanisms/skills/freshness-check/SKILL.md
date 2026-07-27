@@ -70,7 +70,7 @@ across several fences (or keep them in one with comment dividers; both work). Or
 | `check_cmd` | no | shell one-liner for mechanical checks (`--run`) — see the rules below |
 | `confidence` | no | flag assumptions vs verified facts |
 
-### Writing a `check_cmd` — both rules learned the hard way, 2026-07-26
+### Writing a `check_cmd` — all three rules learned the hard way, 2026-07-26/27
 
 - **Relative paths are correct, and they resolve against the REGISTRY'S own directory**, not the
   caller's cwd. That is deliberate: it is what lets a per-repo registry be plucked out and moved
@@ -82,6 +82,15 @@ across several fences (or keep them in one with comment dividers; both work). Or
   cmd.exe compared the literal command text. The checker now **refuses** such a `check_cmd` with an
   explanation instead of running it, because a wrong verdict here is indistinguishable from a real
   staleness hit. Use a plain argv command, or move the comparison into `how_to_check` prose.
+- **POSIX *commands* are refused too, wherever they do not resolve.** The syntax rule above screens
+  for metacharacters only, so `test -f a -a -f b` and `grep -q x file` — the shape most real entries
+  use — slipped through and ran under `cmd.exe`, which has no builtin `test`/`grep`. Whether they
+  worked was a PATH lottery: fine from Git Bash (`Git\usr\bin` has `test.exe`), *"'test' is not
+  recognized"* + exit 1 from PowerShell, i.e. a false STALE on a claim that was fine. The checker
+  now resolves each pipeline stage's command with `shutil.which()` first and prints
+  `[refused]: … NOTHING WAS COMPARED` when it cannot, rather than emitting a verdict. **Prefer a
+  cross-platform executable** — `python tools/check_whatever.py <mode>` — which dodges this
+  entirely; put anything shell-shaped into `how_to_check`.
 
 ### Test a new entry with a FUTURE `--today`
 

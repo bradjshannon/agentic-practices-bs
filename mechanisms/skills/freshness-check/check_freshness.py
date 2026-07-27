@@ -16,14 +16,51 @@ Exit code: 0 if nothing needs attention, 1 if any entry is due/overdue/always/ma
 --run executes each due entry's `check_cmd` via the shell. It runs commands defined IN the
 registry file, so treat the registry as trusted input (it is your own repo file); do not point
 this at a registry you did not author.
+
+A `check_cmd` that cannot run correctly here is REFUSED rather than run: POSIX shell *syntax*
+on Windows (cmd.exe would misread it) and any pipeline stage whose command resolves to no
+executable on this platform. Both print `[refused]` and are excluded from the verdict — a
+command that never ran is not evidence of staleness.
 """
 import os
 import sys
 import re
+import shlex
+import shutil
 import argparse
 import pathlib
 import subprocess
 from datetime import date, datetime
+
+# Shell builtins/keywords a POSIX shell runs itself, so shutil.which() will not find them even
+# though the command works. Only honoured off Windows -- cmd.exe has none of these.
+_SHELL_BUILTINS = {"test", "[", "[[", "cd", "echo", "true", "false", ":", "set", "export",
+                   "printf", "read", "exit", "source", "."}
+
+
+def unresolvable_stages(cmd):
+    """First tokens of any pipeline stage that resolves to no executable on this platform.
+
+    Empty list means every stage resolves. See the refusal in main() for why a non-empty
+    list must NOT be turned into a staleness verdict.
+    """
+    missing = []
+    for stage in re.split(r"\|\||&&|\||;", cmd):
+        stage = stage.strip()
+        if not stage:
+            continue
+        try:
+            toks = shlex.split(stage, posix=(os.name != "nt"))
+        except ValueError:
+            toks = stage.split()
+        if not toks:
+            continue
+        head = toks[0].strip("\"'")
+        if os.name != "nt" and head in _SHELL_BUILTINS:
+            continue
+        if shutil.which(head) is None:
+            missing.append(head)
+    return missing
 
 
 def die(msg, code=2):
@@ -138,6 +175,25 @@ def main():
                     print(f"           result [refused]: check_cmd uses POSIX shell syntax "
                           f"{bad} but this is Windows (cmd.exe). It would run and return a "
                           f"MEANINGLESS verdict. Use a plain argv command, or move the check "
+                          f"into how_to_check.")
+                    continue
+                # POSIX *commands* are the other half of the same hole, and the metacharacter
+                # screen above does not catch them. `test -f a -a -f b` and `grep -q x f` --
+                # the shape most real entries use -- contain no banned token, so on Windows
+                # they were handed to cmd.exe, which has no builtin `test`/`grep`; resolution
+                # fell to a PATH lookup for test.exe/grep.exe that succeeds from Git Bash and
+                # fails from PowerShell. Observed 2026-07-27: "'test' is not recognized", exit
+                # 1 -> reported as a staleness hit for a claim that was fine. Same class of
+                # confident-wrong-verdict as the syntax case, so same answer: refuse. Resolve
+                # every pipeline stage's command first; if one does not exist here, say that
+                # nothing was compared instead of emitting a verdict.
+                missing = unresolvable_stages(cmd)
+                if missing:
+                    print(f"           result [refused]: check_cmd needs {missing}, which "
+                          f"resolves to no executable on this platform ({sys.platform}). "
+                          f"NOTHING WAS COMPARED -- this is not a staleness result. Run the "
+                          f"sweep where those tools are on PATH, use a cross-platform "
+                          f"executable (e.g. python tools/check.py <mode>), or move the check "
                           f"into how_to_check.")
                     continue
                 print(f"           running: {cmd}")

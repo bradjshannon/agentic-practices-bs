@@ -20,9 +20,13 @@ Contents of this directory:
 
 | File | What it is |
 |---|---|
-| `SKILL.md` | The skill's front matter + operating instructions. Was byte-identical to the deployed original; now carries one documentation-only correction (see [Divergence from the deployed copy](#divergence-from-the-deployed-copy)). |
+| `SKILL.md` | The skill's front matter + operating instructions. |
 | `check_freshness.py` | The engine. Pure date math + reporting; optional `--run` for mechanical checks. |
 | `example-trigger/session_start_freshness.py` | **An example, not an install.** A SessionStart hook that surfaces overdue entries at turn 0. |
+
+`SKILL.md` and `check_freshness.py` have both been fixed since the original copy — see
+[Divergence from the deployed copy](#divergence-from-the-deployed-copy) for what changed and why
+the deployed install on `video` already has it.
 
 ## Install
 
@@ -109,9 +113,9 @@ verdict*, which is worse than no check at all, because it is indistinguishable f
    Windows is `cmd.exe`, where `$(…)`, `${…}`, backticks, `&&`, `||` and `;` are not expanded.
    A version-comparison using `[ "$(grep …)" = "$(grep …)" ]` returned non-zero for two files
    that genuinely matched. The engine now refuses such a command with an explanation.
-3. **POSIX *commands* are not refused — and on Windows they are a PATH lottery.** The refusal in
+3. **POSIX *commands* were a PATH lottery on Windows. Refused since 2026-07-27.** The refusal in
    (2) screens for shell metacharacters only. A `check_cmd` of `test -f a -a -f b`, or
-   `grep -q x file`, contains none of them, so on Windows it runs. Whether it *works* depends
+   `grep -q x file`, contains none of them, so on Windows it ran. Whether it *worked* depended
    entirely on the PATH of whatever process invoked the sweeper, because `--run` uses
    `subprocess.run(cmd, shell=True)` with **no `env=`** — the environment is inherited verbatim,
    and `cmd.exe` has no builtin `test`/`grep`, so resolution is pure PATH lookup for
@@ -124,17 +128,28 @@ verdict*, which is worse than no check at all, because it is indistinguishable f
    | Git Bash | `rc=0`, works | its PATH prepends `C:\Program Files\Git\usr\bin`, which ships `test.exe`, `grep.exe` |
    | PowerShell / `cmd.exe` | `rc=1`, *"'test' is not recognized…"* | the *system* PATH carries only `Git\cmd` and `Git\mingw64\bin`; neither holds `test.exe`. (A `C:\msys64\usr\bin` entry was on PATH and did **not** help — that install had no `test.exe`/`grep.exe`.) |
 
-   So the failure is **conditional, not universal**, and the condition is one you cannot see from
-   the registry: a `--run` sweep launched from a POSIX-ish shell passes, the identical sweep
-   launched from PowerShell reports the entry STALE when nothing is wrong. That is worse than a
+   So the failure was **conditional, not universal**, and the condition is one you cannot see from
+   the registry: a `--run` sweep launched from a POSIX-ish shell passed, the identical sweep
+   launched from PowerShell reported the entry STALE when nothing was wrong. That is worse than a
    flat failure — it is a check whose verdict depends on who started it. An earlier version of
    this file stated the hole as unconditional; it is not.
 
-   **The guidance is unchanged, and the conditionality is the reason for it:** prefer a
-   `check_cmd` that invokes a real cross-platform executable — `python tools/whatever.py <mode>`
-   — and put anything shell-shaped into `how_to_check` prose. Across the three registries seeded
-   so far, 17 of the 19 `check_cmd` entries are POSIX-shaped, so every one of them is
-   PATH-dependent on Windows.
+   **The fix, 2026-07-27.** Before running, the engine splits the `check_cmd` on `|`, `||`, `&&`
+   and `;` and resolves each stage's command with `shutil.which()` (POSIX shell builtins are
+   exempted off Windows, where the shell really does run them). If any stage does not resolve, it
+   prints `result [refused]: … NOTHING WAS COMPARED -- this is not a staleness result` and moves
+   on, instead of turning a missing binary into a verdict. The metacharacter refusal in (2) still
+   runs first. Note the refusal does **not** flip the entry to OK: it is still DUE, and it still
+   contributes to a non-zero exit — the entry needs checking, the machine just declined to
+   pretend it did. Verified from both shells against all three real registries: identical
+   commands, `[ok]` from Git Bash, `[refused]` from PowerShell, and the two
+   `python tools/check_freshness_claims.py <mode>` entries run for real in both.
+
+   **The guidance is unchanged, and is now the way to get an actual answer rather than a
+   refusal:** prefer a `check_cmd` that invokes a real cross-platform executable —
+   `python tools/whatever.py <mode>` — and put anything shell-shaped into `how_to_check` prose.
+   Across the three registries seeded so far, 17 of the 19 `check_cmd` entries are POSIX-shaped,
+   so every one of them is PATH-dependent on Windows and will be refused from a non-POSIX shell.
 
 ## Sweeper vs. project-specific checker — which piece are you getting?
 
@@ -217,21 +232,30 @@ Install instructions and the environment variables are in the module docstring.
 
 ## Divergence from the deployed copy
 
-The default is **byte-for-byte identical to the deployed original**, and it is a deliberate
-default: a "portable" copy that quietly diverges from the copy actually running on a machine is
-the drift this repo exists to document — a fix applied here never reaches the box, a fix applied
-there never reaches anyone else. Fix it in one place and re-sync both. If you re-sync, note the
-date here.
+The goal is **no divergence at all**: a "portable" copy that quietly diverges from the copy
+actually running on a machine is the drift this repo exists to document — a fix applied here
+never reaches the box, a fix applied there never reaches anyone else.
 
-`check_freshness.py` is still byte-identical, including hole (3) above, which is left unfixed on
-purpose (it is a documentation problem more than a code one — the conditionality is the point).
+**On `video` there is no second copy to diverge.** `~/.claude/skills/freshness-check` is a
+directory junction into this directory (see the next section), so editing either path edits the
+same bytes and re-syncing is a no-op. That is why the earlier note here — "corrected here only,
+the deployed copy is not edited from this repo" — was wrong about its own setup: the correction
+had already reached the deployed copy, because they are one file. A machine that installed by
+`cp` instead of `mklink` **does** hold a separate copy; fix it in one place and re-sync there.
+If you re-sync, note the date here.
 
-`SKILL.md` **has one intentional divergence**, 2026-07-27: its Registry-format section (and the
-front matter) said the parser reads *one* fenced yaml block. That was true of an earlier
-`re.search` implementation and is not true of the shipped script, which uses `re.findall` over
-every fence. Corrected here only — the deployed copy under `~/.claude/` is the user's live setup
-and is not edited from this repo. **Re-sync it when you next touch that setup**; until then the
-deployed `SKILL.md` understates what its own engine does.
+Fixes since the copy, applied to the single junctioned file (so both paths carry them):
+
+- **2026-07-27 — `check_freshness.py`, hole (3).** Previously left unfixed on the argument that
+  it was a documentation problem. It is not: the false-STALE it produces is the exact failure
+  the (2) refusal exists to prevent, and it fires on 17 of 19 real entries. `--run` now resolves
+  every pipeline stage with `shutil.which()` and refuses rather than guessing. Docstring and
+  `SKILL.md` updated to match.
+- **2026-07-27 — `SKILL.md`, single-fence claim.** Its Registry-format section (and the front
+  matter) said the parser reads *one* fenced yaml block. That was true of an earlier `re.search`
+  implementation, not of the shipped `re.findall`. The same wrong claim had been copied into the
+  preambles of all three live registries (`conductor-bs`, `iotta-bs`, `iotta-firmware`); all
+  three were corrected the same day and now carry a dated note saying so.
 
 Copied 2026-07-27.
 
@@ -241,8 +265,8 @@ Copied 2026-07-27.
 junction** pointing here, so `git pull` on this repo *is* the update:
 
 ```
-mklink /J "%USERPROFILE%\.claude\skillsreshness-check" ^
-  "%USERPROFILE%\Documents\GitHubgentic-practices-bs\mechanisms\skillsreshness-check"
+mklink /J "%USERPROFILE%\.claude\skills\freshness-check" ^
+  "%USERPROFILE%\Documents\GitHub\agentic-practices-bs\mechanisms\skills\freshness-check"
 ```
 
 Verified at install: the skill runs through the junction against a real registry, and the harness
