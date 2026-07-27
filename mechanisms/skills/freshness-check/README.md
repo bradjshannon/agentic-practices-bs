@@ -20,7 +20,7 @@ Contents of this directory:
 
 | File | What it is |
 |---|---|
-| `SKILL.md` | The skill's front matter + operating instructions. Byte-identical to the deployed original (see [Why byte-identical](#why-byte-identical)). |
+| `SKILL.md` | The skill's front matter + operating instructions. Was byte-identical to the deployed original; now carries one documentation-only correction (see [Divergence from the deployed copy](#divergence-from-the-deployed-copy)). |
 | `check_freshness.py` | The engine. Pure date math + reporting; optional `--run` for mechanical checks. |
 | `example-trigger/session_start_freshness.py` | **An example, not an install.** A SessionStart hook that surfaces overdue entries at turn 0. |
 
@@ -109,15 +109,32 @@ verdict*, which is worse than no check at all, because it is indistinguishable f
    Windows is `cmd.exe`, where `$(…)`, `${…}`, backticks, `&&`, `||` and `;` are not expanded.
    A version-comparison using `[ "$(grep …)" = "$(grep …)" ]` returned non-zero for two files
    that genuinely matched. The engine now refuses such a command with an explanation.
-3. **POSIX *commands* are NOT refused — and this hole is open.** The refusal in (2) screens for
-   shell metacharacters only. A `check_cmd` of `test -f a -a -f b`, or `grep -q x file`, or
-   `curl … | grep -q 200` contains none of them, so on Windows it runs, `cmd.exe` reports
-   *"'test' is not recognized…"*, the exit code is non-zero, and the entry is reported STALE
-   when nothing is wrong. Verified 2026-07-27. Across the three registries this pattern was in
-   use for the large majority of entries, so a `--run` sweep on that platform would have been
-   almost entirely false positives. **If you are on Windows, prefer a `check_cmd` that invokes
-   a real cross-platform executable** — `python tools/whatever.py <mode>` — and put anything
-   shell-shaped into `how_to_check` prose instead.
+3. **POSIX *commands* are not refused — and on Windows they are a PATH lottery.** The refusal in
+   (2) screens for shell metacharacters only. A `check_cmd` of `test -f a -a -f b`, or
+   `grep -q x file`, contains none of them, so on Windows it runs. Whether it *works* depends
+   entirely on the PATH of whatever process invoked the sweeper, because `--run` uses
+   `subprocess.run(cmd, shell=True)` with **no `env=`** — the environment is inherited verbatim,
+   and `cmd.exe` has no builtin `test`/`grep`, so resolution is pure PATH lookup for
+   `test.exe`/`grep.exe`.
+
+   Measured on one Windows box, 2026-07-27, same commands, same script, two shells:
+
+   | Invoked from | `test -f README.md` | Why |
+   |---|---|---|
+   | Git Bash | `rc=0`, works | its PATH prepends `C:\Program Files\Git\usr\bin`, which ships `test.exe`, `grep.exe` |
+   | PowerShell / `cmd.exe` | `rc=1`, *"'test' is not recognized…"* | the *system* PATH carries only `Git\cmd` and `Git\mingw64\bin`; neither holds `test.exe`. (A `C:\msys64\usr\bin` entry was on PATH and did **not** help — that install had no `test.exe`/`grep.exe`.) |
+
+   So the failure is **conditional, not universal**, and the condition is one you cannot see from
+   the registry: a `--run` sweep launched from a POSIX-ish shell passes, the identical sweep
+   launched from PowerShell reports the entry STALE when nothing is wrong. That is worse than a
+   flat failure — it is a check whose verdict depends on who started it. An earlier version of
+   this file stated the hole as unconditional; it is not.
+
+   **The guidance is unchanged, and the conditionality is the reason for it:** prefer a
+   `check_cmd` that invokes a real cross-platform executable — `python tools/whatever.py <mode>`
+   — and put anything shell-shaped into `how_to_check` prose. Across the three registries seeded
+   so far, 17 of the 19 `check_cmd` entries are POSIX-shaped, so every one of them is
+   PATH-dependent on Windows.
 
 ## Sweeper vs. project-specific checker — which piece are you getting?
 
@@ -198,12 +215,22 @@ positives would get it disabled.
 
 Install instructions and the environment variables are in the module docstring.
 
-## Why byte-identical
+## Divergence from the deployed copy
 
-`SKILL.md` and `check_freshness.py` here are byte-for-byte the deployed originals, including
-hole (3) above, which is left unfixed on purpose. A "portable" copy that quietly diverges from
-the copy actually running on a machine is the drift this repo exists to document — and it would
-mean a fix applied here never reaches the box, while a fix applied there never reaches anyone
-else. Fix it in one place and re-sync both. If you re-sync, note the date here.
+The default is **byte-for-byte identical to the deployed original**, and it is a deliberate
+default: a "portable" copy that quietly diverges from the copy actually running on a machine is
+the drift this repo exists to document — a fix applied here never reaches the box, a fix applied
+there never reaches anyone else. Fix it in one place and re-sync both. If you re-sync, note the
+date here.
+
+`check_freshness.py` is still byte-identical, including hole (3) above, which is left unfixed on
+purpose (it is a documentation problem more than a code one — the conditionality is the point).
+
+`SKILL.md` **has one intentional divergence**, 2026-07-27: its Registry-format section (and the
+front matter) said the parser reads *one* fenced yaml block. That was true of an earlier
+`re.search` implementation and is not true of the shipped script, which uses `re.findall` over
+every fence. Corrected here only — the deployed copy under `~/.claude/` is the user's live setup
+and is not edited from this repo. **Re-sync it when you next touch that setup**; until then the
+deployed `SKILL.md` understates what its own engine does.
 
 Copied 2026-07-27.

@@ -5,8 +5,8 @@ description: >
   asks to "check freshness", "what's stale", "review the freshness registry", "what needs
   re-checking", "sweep staleness", or during a wind-down / handoff when volatile assertions
   (model rosters, pricing, API surfaces, external facts) should be reviewed on a cadence rather
-  than by memory. Operates on any markdown file with a fenced yaml block of entries (default:
-  freshness.md) or a plain .yaml registry.
+  than by memory. Operates on any markdown file with one or more fenced yaml blocks of entries
+  (default: freshness.md) or a plain .yaml registry.
 ---
 
 # Freshness check
@@ -53,8 +53,10 @@ at a registry you authored.
 
 ## Registry format
 
-A markdown file with one fenced ` ```yaml ` block holding a list of entries (or a plain
-`.yaml`/`.yml` file that is a list, or a dict with an `entries:` list). Per entry:
+A markdown file holding a list of entries in one or more fenced ` ```yaml `/` ```yml ` blocks —
+**every** fence is extracted and the blocks are concatenated, so a registry may split its entries
+across several fences (or keep them in one with comment dividers; both work). Or a plain
+`.yaml`/`.yml` file that is a list, or a dict with an `entries:` list. Per entry:
 
 | field | required | purpose |
 |---|---|---|
