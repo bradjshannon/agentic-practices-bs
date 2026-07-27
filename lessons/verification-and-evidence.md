@@ -595,3 +595,42 @@ ordinary use of the word — but the number is computed on object identity. That
 the one the interface suggests, not an idiosyncratic slip. The general form: when a tool's label
 and its computation answer different questions, the label wins in the reader's head. Treat
 confidently-named metrics as claims about their computation, not about their name.
+
+## A fix verified against the diff is verified against an intention (2026-07-27)
+
+*2026-07-27*
+
+**Symptom.** A failing assertion had a fix sitting ready for two runs, recorded with unusual care:
+the author had explicitly rejected their own first hypothesis, read the introducing commit's diff,
+and written it up as *"verified against the diff, not guessed."* A later run re-derived it before
+applying, by executing the assertion against the file it actually runs against. **The recorded fix
+still failed.** So did the assertion it was meant to replace, and so did a sibling assertion nobody
+had noticed was also failing. The careful write-up had been carried forward as ready-to-apply by an
+intervening run that had no reason to doubt it.
+
+**What actually happened.** The diff showed a literal being folded into a regex — and that reading
+was correct, as far as it went. What the diff did not show was that the strings live inside a
+double-quoted shell string, so every quote is backslash-escaped *on disk*. The diff renders the
+author's intent; the file carries the bytes. A substring assertion runs against the bytes. Both the
+original assertion and the proposed replacement were written in the un-escaped form, so both missed,
+and the proposed fix was a lateral move dressed as a correction.
+
+**The rule.** **Verify a fix against the artifact it will execute against, not against the change
+that produced it.** A diff, a commit message, a PR description, and a code-review comment are all
+statements of intent. Reading them more carefully makes your model of the intent better; it cannot
+tell you what is on disk. If the fix is an assertion, *run the assertion*. If it is a patch, apply
+it to a scratch copy and observe the result. The cost here was two commands.
+
+**Why it generalises.** The failure is invisible from inside, and it disguises itself as diligence.
+Rejecting a first hypothesis and going to the diff *is* the right instinct — it is what separates a
+careful agent from a guessing one — and it produces exactly the confidence that stops the next
+person from re-checking. Rigor spent one layer above the artifact reads, in the written record, the
+same as rigor spent on the artifact. So the practice cannot be "be more careful"; it has to be a
+question about altitude: **the thing I checked — is it the thing that runs?** Diffs, docs, configs
+as written, and schemas as documented all sit one layer above the bytes that execute. A claim
+verified at the wrong altitude inherits none of the authority of the checking that went into it,
+and all of the credibility.
+
+Corollary for anything inherited: a predecessor's note marked *verified* records that they were
+satisfied, not that the claim is true. Re-derive before acting, especially when the note is unusually
+well-argued — that is precisely the note nobody re-checks.
