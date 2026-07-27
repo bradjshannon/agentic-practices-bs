@@ -15,6 +15,25 @@ much he has to read, and in its blocking path it was tripling it. A control whos
 directly negates its own purpose is worse than no control — it is a control arguing for its own
 removal.
 
+A SECOND, INDEPENDENT REASON — WINDOWS CONSOLE SPAM (workpc, 2026-07-27)
+------------------------------------------------------------------------------------------------
+Brad: *"some scheduled process on this machine now opens a dozen+ terminal windows in the
+foreground every few minutes."* On Windows, Claude Code spawns each hook `command` through
+`bash.exe -c` WITHOUT CREATE_NO_WINDOW, so every **entry** in settings.json allocates a fresh
+console and pops a visible window. Measured that day from a console-less parent, which is the
+condition that matters:
+
+    bash.exe, NO flag             visible_windows=1
+    bash.exe, CREATE_NO_WINDOW    visible_windows=0
+
+Nothing inside a hook can suppress this — the console exists before the hook's own code runs —
+so the only lever is FEWER ENTRIES. One gate is one window instead of one per check. This is
+independent of the reading-cost argument above and would justify the gate on its own.
+
+(That investigation's actual culprit turned out to be elsewhere — a status server shelling out
+to `git` from a `pythonw.exe` parent — but the per-entry cost measured here is real and applies
+to every Windows box running these hooks.)
+
 THE FIX
 -------
 One gate, run once, that executes every check and concatenates their objections into a single
