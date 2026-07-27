@@ -234,3 +234,28 @@ and is not edited from this repo. **Re-sync it when you next touch that setup**;
 deployed `SKILL.md` understates what its own engine does.
 
 Copied 2026-07-27.
+
+## Installed by junction on `video` (2026-07-27)
+
+`video` does not hold a copy of this skill — `~/.claude/skills/freshness-check` is a **directory
+junction** pointing here, so `git pull` on this repo *is* the update:
+
+```
+mklink /J "%USERPROFILE%\.claude\skillsreshness-check" ^
+  "%USERPROFILE%\Documents\GitHubgentic-practices-bs\mechanisms\skillsreshness-check"
+```
+
+Verified at install: the skill runs through the junction against a real registry, and the harness
+re-registered the skill with *this* copy's description rather than the previous local one.
+
+**Know the trade you are making.** This turns the repo into a **live dependency of the machine's
+agent setup**, not a catalogue it copies from. A bad push from another machine changes how this box
+behaves at the next `git pull`, with no review step in between — the same property that makes the
+update automatic makes a mistake automatic. That is an acceptable trade for a read-only sweeper
+whose worst failure is a wrong staleness verdict; it would **not** be acceptable for anything that
+writes, deletes, or executes on the machine's behalf, and this junction should not be used as a
+precedent for those without a review gate.
+
+To undo: delete the junction (`rmdir` on the link only — it does not touch this repo) and restore
+a copy. A pre-junction backup was kept at `~/.claude/_freshness-check.backup-<date>`; note that a
+backup must NOT live under `~/.claude/skills/`, where it registers as a second, duplicate skill.
