@@ -73,3 +73,38 @@ content most likely to be mangled is exactly the content that *documents* mangli
 sequences, regexes, quoting rules — so the failure concentrates in the commits explaining the
 problem. And the blast radius is set by what you happened to be editing: a doc, or the guard
 protecting the rest of the run.
+
+---
+
+## When a build resolves sources through an environment variable, reachability is the wrong question
+
+*2026-07-28*
+
+**Symptom.** A memory-sizing change was described as unshipped by a decision record, a handoff, a
+status card, and the responsible engineer twice — while it was running in production on the
+hardware. It had already caused an outage that nobody had connected to it.
+
+**What actually happened.** Two repositories: one holds shared library sources, the other the
+product that pins them by tag. The change landed in the library repo, on a commit **not** contained
+in the pinned tag — so a tag-pinned build genuinely would not carry it. Separately, a
+*build-plumbing* commit in the **product** repo widened an environment-variable override so more
+components compiled from the library's live working tree instead of the pinned tag. From then on
+the change shipped on every build.
+
+No commit in the product repo changed any sizing. No commit in the library repo was ever
+"deployed". **Each repository's history, read alone, is honest and incomplete** — so the standard
+checks (`git log`, is-the-commit-an-ancestor, is-it-in-the-branch-we-ship-from) all *pass* while
+being useless, because they answer *reachability in this history* and the question was *which tree
+did the compiler actually read*.
+
+**The rule.** Before believing anything is unshipped: check whether it is in the pinned reference
+**and, separately, whether an override makes the pin irrelevant**. Most such build systems already
+print which source won at configure time, and the deployed artifact usually reports its own source
+revision and hash. Compare the running artifact's reported revision against the pin. In this case
+the device had been reporting its true source revision the entire time and nobody compared it.
+
+**Why it generalises.** Any "use my local checkout" escape hatch — a path override, a workspace
+link, a vendored directory, a dev-mode resolver — silently converts a pinned dependency into a
+live one, and does it from a commit that looks like plumbing. The blast radius of a change is then
+invisible from either repository's log. Treat "not shipped yet" as a claim about the world that
+rots, exactly like "still open" and "already fixed".

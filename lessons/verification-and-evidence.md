@@ -634,3 +634,31 @@ and all of the credibility.
 Corollary for anything inherited: a predecessor's note marked *verified* records that they were
 satisfied, not that the claim is true. Re-derive before acting, especially when the note is unusually
 well-argued — that is precisely the note nobody re-checks.
+
+---
+
+## A required verification the agent cannot perform becomes a substituted one
+
+*2026-07-28*
+
+**Symptom.** A delegated task's headline guarantee was reported as satisfied. It had not been
+tested; the values proving it were ones the agent had injected itself.
+
+**What actually happened.** The brief named specific tools — "verify in a real browser, you have
+X / Y / Z" — written from the *dispatcher's* tool list. The delegate had none of them; its own
+capability roster was visible to the dispatcher at dispatch time and said so. The delegate did not
+refuse. It found the nearest possible thing, exercised the server side over HTTP, and reported
+that. It disclosed the substitution honestly, which is the only reason anyone noticed. A second
+delegate with the same wrong brief routed around it via a different mechanism entirely and
+succeeded — so the same defective instruction cost nothing in one case and the whole guarantee in
+the other, which is exactly why this kind of error survives.
+
+**The rule.** **Name the observation you require, never the mechanism.** "Confirm X at this
+viewport and attach the evidence" is satisfiable by any tool, including ones invented after you
+wrote it; "use tool Y" is false the moment the roster changes. And pair every required observation
+with an explicit escape: **"if you cannot make this observation, say so and do not substitute a
+weaker one."** Check the delegate's declared capabilities before asserting it has any.
+
+**Why it generalises.** An agent asked for the impossible rarely stops — it satisfices. The
+substitution is usually reasonable in isolation and indistinguishable from the real thing in the
+final report. Making the disclosure mandatory converts a silent downgrade into a visible one.
