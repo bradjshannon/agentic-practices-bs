@@ -733,3 +733,81 @@ every check downstream of it inherited a false negative. Note also which evidenc
 independent observations — repo, clone, cache, inventory command — all agreed the skill was
 installed, and all four were true. None of them was the question, which was *what the running
 session actually loaded*. Agreement among checks that share a blind spot is not corroboration.
+
+## Measure the baseline before you attribute a delta
+
+*2026-07-28*
+
+**Symptom.** A page was rebuilt, and a check reported that loading it three times spawned one
+stray console window. That is exactly the defect the rebuild was supposed to have fixed, so the
+next half hour went into auditing every process-spawning call site in two large files. All of
+them were already correct.
+
+**What actually happened.** Nobody had measured what the counter did with **no page loads at
+all**. Running that control took thirty seconds and returned: idle drift `delta=1`, three page
+loads `delta=0`. The number was ambient background activity on the machine. The treatment arm
+was clean the whole time — and the "regression" was an artifact of never having sampled the
+null condition.
+
+**The rule.** Before attributing a measured delta to your change, **measure the same quantity
+with the change not exercised.** If the metric moves on its own, your delta is noise until
+proven otherwise. This is cheap, it is skipped almost every time, and it is skipped hardest when
+the number confirms what you already suspect.
+
+**Why it generalises.** A metric that drifts is indistinguishable from a metric that responds,
+unless you have looked at it idle. Confirmation is where controls feel least necessary and are
+most load-bearing — you run them when the answer is surprising, and the answer that needs them
+is the one that isn't.
+
+---
+
+## Any quantitative claim needs its comparability and its reach stated
+
+*2026-07-28*
+
+**Symptom.** Two conclusions were reported in one session, with correct arithmetic and clean
+tables: an improvement with "the confound excluded", and "the same subject appears on both sides,
+so this is controlled". Both were wrong. The confound was not excluded. The subject dominated the
+*whole* dataset but had **zero** observations in the *subset* actually being compared — where one
+side was seven subjects over two weeks and the other was one subject on one day.
+
+**What actually happened.** No measurement was faulty. Every number was real. What was missing
+was one sentence about whether the two groups differed *only* in the thing being tested, and how
+far the conclusion was allowed to travel. Absent that sentence, a correct number over two
+non-comparable populations reads exactly like a finding.
+
+**The rule.** Every analysis states two things explicitly, in a fixed shape so it can be checked:
+**internal validity** — what else differs between the compared groups (subject, day, build,
+traffic mix, sample size) — and **external validity** — what population and window the claim
+covers. "Uncontrolled, scoped to this subject and this window" is a complete and respectable
+answer. Silence is not, because silence reads as "controlled".
+
+**Why it generalises.** Analysis output is consumed as a conclusion, not as a dataset. Whoever
+reads it cannot see the sampling unless you describe it, so an unstated comparability problem is
+invisible by construction — and the arithmetic being right is what makes it persuasive. Enforced
+here by [`mechanisms/hooks/data_validity_statement.py`](../mechanisms/hooks/data_validity_statement.py).
+
+---
+
+## A directory listing's timestamp is not the file's contents
+
+*2026-07-28*
+
+**Symptom.** A long-running daemon looked dead: its process existed, but a listing showed its log
+file last written 26 hours earlier, despite work having arrived since. The diagnosis being drafted
+was "alive but hung — a process that exists and does nothing".
+
+**What actually happened.** Reading the *file* showed entries from minutes earlier. The daemon was
+fine. Directory metadata is not flushed for a file held open with buffered writes, so the listing's
+modified-time can lag the contents by hours on some platforms. The listing was stale, not the log.
+
+**The rule.** When a timestamp is your evidence that something stopped, **open the artifact and
+read the end of it.** Metadata about a file is a different observation from the file, and for
+anything currently being written the metadata is the less reliable of the two.
+
+**The generalisation worth keeping.** This is the same shape as judging a mutation by its exit
+code rather than its postcondition, one level out: a cheap proxy standing next to the real
+evidence, agreeing with it most of the time, and diverging exactly when something is actively
+happening.
+
+---

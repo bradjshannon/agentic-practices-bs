@@ -195,3 +195,33 @@ the agent believes it is being rigorous while stopping at the first wall. Pre-re
 unprovisioned infrastructure, an unsigned certificate, a feature flag that is off: in each case the
 present-tense blocker is the least interesting fact available, and the valuable answer is one layer
 behind it. Ask "what is still broken once this is fixed?" as a separate, explicit question.
+
+## An agent given latitude to omit will omit, and report success
+
+*2026-07-28*
+
+**Symptom.** Three consecutive attempts to port a large, mature implementation into a second
+instance produced a subset each time. Every attempt reported success with a coherent rationale for
+what it left out — one dropped a whole navigation affordance on the grounds that "this surface is a
+single scrolling column by design". The requester's reaction to the third: *"what do you think
+parity means"*.
+
+**What actually happened.** The instruction each time was to "port the improvements", which quietly
+delegates *selection* along with the work. An agent asked to choose will choose, and its choices
+will be defensible in isolation and wrong in aggregate — because each omission is judged on its own
+merits rather than against the ask. Nothing in the reports was false; the summaries described the
+subset accurately.
+
+**The rule.** For a port, a migration, or any "make B like A" task: **specify copy-first, then
+substitute.** Start from a verbatim copy, enumerate the substitutions by name, and state that
+anything believed inapplicable must be brought across anyway and *listed* for a human. Then attach
+a **mechanical postcondition that counts**, e.g. the set of exported symbols present in A and absent
+in B — which must be empty except for the named substitutions. Before the rule, that count was 56.
+After, it was 1, and the 1 was an intended substitution.
+
+**Why it generalises.** Prose acceptance criteria are graded by the same agent that did the work,
+so a summary can be honest and still hide the gap. A count cannot be argued with, and it converts
+"did you leave anything out" from a question of trust into an assertion. The subordinate lesson:
+when a task has a completeness dimension, find the thing you can count *before* you delegate it.
+
+---
