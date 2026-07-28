@@ -811,3 +811,58 @@ evidence, agreeing with it most of the time, and diverging exactly when somethin
 happening.
 
 ---
+
+## A ratchet against a moving reference measures the reference
+
+*2026-07-28*
+
+**Symptom.** A drift check compared a stale copy of a generator against its upstream and reported
+the copy had "worsened" from 58 to 66 functions behind — within an hour, while nobody had touched
+the copy at all.
+
+**What actually happened.** The check ratcheted on a *count*: "fail if the number of upstream
+functions missing from the copy exceeds the recorded baseline of 58." But the upstream was live,
+and its author shipped 8 new functions that afternoon. The gap grew by exactly those 8. The copy
+was byte-identical to when the baseline was recorded. The metric moved entirely because the
+*reference* moved, and it would have gone red every time the upstream was healthy and active —
+i.e. the alarm fires hardest precisely when nothing is wrong.
+
+**The rule.** A ratchet needs a fixed reference. Before pinning a baseline, ask **what happens to
+this number when the thing I am comparing against changes and my subject does not.** If the answer
+is "it moves," you have not built a ratchet, you have built a subscription to someone else's commit
+rate. Either pin the reference (compare against a specific commit), ratchet on a *set* of named
+items rather than a count, or — when the debt is known and a rebuild is already scheduled — make it
+**informational and never failing**. A check that is red by construction gets muted, and "muted"
+and "nobody looked" are the same state.
+
+**Why it generalises.** Any metric of the form "distance from X" inherits X's volatility. Coverage
+deltas against a moving main, lint-debt counts against an evolving ruleset, dependency lag against
+an upstream release cadence, "N behind" for a fork — all have this shape. The failure is quiet
+because the number is genuinely correct; it just is not measuring the thing whose name it carries.
+
+## The renderer worked while every writer was dead
+
+*2026-07-28*
+
+**Symptom.** A status page rendered perfectly — correct data, no errors, freshly rebuilt hours
+earlier. Every command-line tool that *wrote* to that page crashed on every invocation. Nobody
+noticed until a human asked why his messages were not being answered.
+
+**What actually happened.** The page generator had been replaced wholesale with a copy of a sibling
+project's generator. The new copy inlined a helper the old one exported (`read_jsonl`), renamed a
+path constant (`REPLIES` → `REPLIES_FILE`), and dropped a slug function. The writer CLIs imported
+all three from the generator, treating it as the single source of truth for paths — good design,
+and exactly what made them break together. Reads went through the new code; writes went through
+the old API. The rebuild was verified by checking that **the page rendered**, which exercised zero
+percent of the writer path.
+
+**The rule.** When you replace a module wholesale, the postcondition must cover **every consumer of
+its API, not just the one you were looking at**. Enumerate importers (`grep` for the module name
+and for `module.attr` uses) and *run* each one, rather than reasoning that they are fine. Reads and
+writes fail independently and asymmetrically: the read path is usually the one being demoed, so it
+is the one that gets verified, while the write path fails silently until someone tries to use it.
+
+**Why it generalises.** Any wholesale swap — a vendored library bump, a generated-client
+regeneration, a rewrite behind a "same interface" claim — creates this asymmetry. The visible
+surface keeps working, which actively suppresses investigation. Ask specifically: *what writes to
+this thing, and when did I last run one of those?*
