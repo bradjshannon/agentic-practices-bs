@@ -1,5 +1,41 @@
 # Verification and evidence
 
+## Your client and the subject may not reach the service by the same route
+
+*2026-07-28*
+
+**Symptom.** Every embedded device on a bench lost its connection to a server within the same
+millisecond and none could reconnect. From the developer's own workstation the server answered
+instantly and correctly — `http_code=200`, full TLS, on the exact URL the devices were failing on.
+Three successive investigations concluded the fault was in the device firmware, and each was
+wrong.
+
+**What actually happened.** The workstation was a member of the private overlay network (Tailscale,
+MagicDNS on) and the devices were not. The overlay's resolver intercepted the public hostname and
+routed the workstation's request over the encrypted mesh directly to the host. The devices, being
+outside the mesh, had to use the public ingress — and the ingress had stopped serving that node.
+**The workstation's request never touched the path under test.** The tell was one field nobody
+printed until late: `curl -w '%{remote_ip}'` returned the overlay address, not the public one.
+Forced to the real ingress with `--resolve`, the same request returned `http_code=000` and a TLS
+probe returned "no peer certificate available" — reproducing the device's symptom exactly, from
+the same machine, one command apart.
+
+**The rule.** Before treating your own successful request as a control, **prove your client took
+the same route the subject takes.** Print the peer address (`%{remote_ip}`), pin the destination
+(`--resolve`, connect by IP with an explicit SNI/Host), or run the probe from outside whatever
+privileged network you are sitting in. Client identity — VPN membership, overlay networks, split
+DNS, a proxy in the environment, a hosts entry, an internal load balancer — silently rewrites the
+path, and nothing in a `200` says which path produced it.
+
+**Why it generalises.** A control is only a control if it differs from the treatment in the one
+variable under test. "Works from my machine" usually differs in several, and network identity is
+the one that leaves no trace in the output. This is the same disease as a control contaminated
+identically to the treatment, wearing the opposite coat: there, the control was too much like the
+subject to discriminate; here, it was too unlike it to be relevant. Both produce agreement that
+means nothing, and both cost far more than the one command that would have exposed them.
+
+---
+
 ## An ops command's exit status says it ran, never that it worked
 
 *2026-07-21*
