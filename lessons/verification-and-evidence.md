@@ -866,3 +866,40 @@ is the one that gets verified, while the write path fails silently until someone
 regeneration, a rewrite behind a "same interface" claim — creates this asymmetry. The visible
 surface keeps working, which actively suppresses investigation. Ask specifically: *what writes to
 this thing, and when did I last run one of those?*
+
+## A missing value satisfies a negative assertion, so the check goes green for the wrong reason
+
+*2026-07-28*
+
+**Symptom.** A freshness-check system re-runs each claim's premise and marks the ones that no
+longer hold. A new check kind read a field out of a JSON response and compared it to an expected
+value, with a flag saying whether the claim needed that comparison to be true or false. Asserting
+*"this field is NOT X"* against a response where **the field did not exist at all** reported
+HOLDS — a green, confident verdict resting on a field nobody could find.
+
+**Why it is not a typo.** "Field ≠ X" is *vacuously true* when the field is absent, so the code was
+correct and the answer was worthless. This is the same shape as `assertNotIn(x, collection)`
+passing against an empty collection, a filter that matches nothing reporting "no violations", and a
+policy check that finds no resources concluding compliance. Positive and negative assertions are
+**not symmetric under missing data**: absence is real evidence against "it is X" and no evidence at
+all about "it is not X".
+
+**The rule.** Wherever a predicate can be asserted in both directions, decide what a **missing
+operand** means *separately for each direction*, and make the answer for the negative direction
+"I could not observe that" rather than a pass. If your system has a third outcome for instrument
+failure — could-not-check, inconclusive, skipped — this is what it is for. If it does not have one,
+that is the actual bug: a two-valued verifier will always resolve "I do not know" into whichever
+answer the code path falls through to.
+
+**How it was caught, which is the transferable part.** The positive control and the negative control
+were run **side by side in one command**, not one at a time. Run alone, the negative case printed
+`HOLDS` and looked exactly like success. Run beside its sibling, the *detail strings* were
+identical — both said "there is no such field" — while the verdicts differed. The contradiction was
+visible only in the diff between two results, never in either result on its own. The same run also
+caught a second bug in the same draft: a byte cap set to a round 1,000,000 against a real payload
+of 1,081,668 B, which turned every check against that endpoint into a silent could-not-check.
+
+**Why it generalises.** Any system that grades claims — test assertions, lint rules, policy
+engines, alert conditions, monitoring queries — eventually gets asked to assert a *negative*. That
+is precisely where an empty result set and a satisfied condition become indistinguishable, and
+where the grader is most likely to be trusted because it is green.
