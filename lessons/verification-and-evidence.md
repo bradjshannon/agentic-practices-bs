@@ -662,3 +662,38 @@ weaker one."** Check the delegate's declared capabilities before asserting it ha
 **Why it generalises.** An agent asked for the impossible rarely stops — it satisfices. The
 substitution is usually reasonable in isolation and indistinguishable from the real thing in the
 final report. Making the disclosure mandatory converts a silent downgrade into a visible one.
+
+---
+
+## An update mechanism keyed on a hand-maintained version string is a no-op that reports success
+
+*2026-07-28*
+
+**Symptom.** A skill was missing from an agent's session for days. It was present in the repo, in
+the marketplace clone, and in the installed plugin cache; the packaging tool's own inventory command
+listed it. Every place anyone thought to look said the thing was installed.
+
+**What actually happened.** `plugin update` compared the `version` field in the plugin manifest, not
+the git sha. That field had been written once, at creation, and never touched again across 69
+subsequent commits — including the one that added the missing skill. So the update command answered
+*"already at the latest version (0.1.0)"* and exited 0, every time, forever. The cache had only ever
+advanced by a manual reinstall. Bumping the version by one minor made the identical command pull the
+new commit immediately, and the installed sha then matched the repo tip exactly.
+
+A second, independent defect sat on top of it: the bare plugin name failed with *"not found"* while
+the fully-qualified `name@marketplace` form worked. The natural invocation was the broken one, so
+the usual experience of trying to update was an error message that looked like a config problem.
+
+**The rule.** When a cache is keyed on a value a human has to remember to increment, **the
+increment is the mechanism** — treat forgetting it as the default case, not the exception. Either
+key on something that changes on its own (content hash, git sha, mtime), or make the stale-version
+state loud. And verify an update at the **postcondition**: read back the installed identifier and
+assert it equals the source's, rather than trusting *"already at the latest version"* — that string
+is the failure and the success rendered identically.
+
+**Why it generalises.** This is the "green signal that isn't measuring the thing" family, in its
+most expensive costume: the mechanism *designed to detect staleness* was itself the stale thing, so
+every check downstream of it inherited a false negative. Note also which evidence lied. Four
+independent observations — repo, clone, cache, inventory command — all agreed the skill was
+installed, and all four were true. None of them was the question, which was *what the running
+session actually loaded*. Agreement among checks that share a blind spot is not corroboration.
