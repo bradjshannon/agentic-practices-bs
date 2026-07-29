@@ -146,6 +146,38 @@ with Sandbox() as s:
     check("  ... and nothing was left staged", s.staged(), set())
 
 
+# --- THE THIRD REGRESSION: a named path that is already current ----------------------------
+# Found 2026-07-29 by the tool firing on a real, correct commit. POSTCONDITION 1 explicitly
+# tolerates a named path with no changes ("Not an error by itself: a path with no changes stages
+# nothing") and POSTCONDITION 3 then failed on that same path AFTER the commit succeeded. The two
+# checks disagreed, so naming an unchanged file alongside a changed one was a guaranteed exit 1 on
+# a good commit. A mandatory guard that cries wolf on success gets ignored, true positives and all.
+#
+# The pair below is the whole point: the tolerated case must PASS and the real case must still
+# FAIL, or the fix is just a hole.
+
+with Sandbox() as s:
+    s.write("changed.txt", "new content\n")
+    rc, out, err = run_cv(s.repo, ["changed.txt", "seed.txt"], "one changed, one current\n")
+    check("an already-current path alongside a changed one is tolerated", rc, 0)
+    check("  ... and the commit really happened", s.head_subject(), "one changed, one current")
+    check("  ... and it says how many were already current", "already current" in out, True)
+
+with Sandbox() as s:
+    # NEGATIVE CONTROL for that exemption. A path with REAL changes that does not land must
+    # still raise -- otherwise the exemption above would have swallowed the 2026-07-29 defect
+    # this tool was built for. Simulated by staging a change and having a pre-commit hook drop
+    # it from the index, so the commit succeeds while the file never reaches the tree.
+    s.write("changed.txt", "new content\n")
+    s.write("dropped.txt", "will be unstaged by the hook\n")
+    hook = s.repo / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\ngit restore --staged dropped.txt\n", encoding="utf-8")
+    hook.chmod(0o755)
+    rc, out, err = run_cv(s.repo, ["changed.txt", "dropped.txt"], "one silently dropped\n")
+    check("a CHANGED path that does not land still raises", rc, 1)
+    check("  ... and it names the path that went missing", "dropped.txt" in err, True)
+
+
 # --- REFUSALS. The load-bearing half. ------------------------------------------------------
 # Each asserts BOTH a non-zero exit AND that HEAD did not move. Exit code alone would pass
 # on a version that committed and then complained.

@@ -107,6 +107,7 @@ def run(repo: Path, paths: list[str], message: str, *, push: bool,
     got = staged_paths(repo)
     missing = {p for p in want if p not in got}
     extra = got - want
+    unchanged: set[str] = set()
     if missing:
         # Not an error by itself: a path with no changes stages nothing.
         unchanged = {p for p in missing
@@ -144,13 +145,27 @@ def run(repo: Path, paths: list[str], message: str, *, push: bool,
 
     # POSTCONDITION 3: HEAD's tree really contains each path. This is the check
     # that would have caught the 2026-07-29 failure — the one nothing else does.
+    #
+    # A path that was ALREADY IDENTICAL to HEAD is exempt, and this exemption is not a
+    # loophole — it is the same tolerance POSTCONDITION 1 already grants above, applied
+    # consistently. Without it the two checks contradict each other: naming a file that
+    # happens to be unchanged is explicitly "not an error by itself" at staging time, and
+    # then a guaranteed exit 1 here, AFTER the commit has succeeded. Measured 2026-07-29:
+    # a regenerated report came out byte-identical, and the tool reported FAILURE on a
+    # commit that was completely fine. A mandatory guard that cries wolf on success is how
+    # a guard gets ignored, which costs its true positives too.
+    #
+    # The check still bites where it matters: `unchanged` is computed from `git status`
+    # BEFORE the commit, so a path that had real changes and then failed to land is still
+    # absent here and still raises.
     in_commit = set(git(repo, "show", "--pretty=", "--name-only",
                         head).splitlines())
-    absent = [p for p in paths if p not in in_commit]
+    absent = [p for p in paths if p not in in_commit and p not in unchanged]
     if absent:
         raise Failed(f"HEAD {head[:8]} does not contain: {absent}")
 
-    print(f"committed {head[:8]} on {branch}: {len(paths)} path(s)")
+    noted = f" ({len(unchanged)} already current)" if unchanged else ""
+    print(f"committed {head[:8]} on {branch}: {len(paths)} path(s){noted}")
 
     if not push:
         return 0
