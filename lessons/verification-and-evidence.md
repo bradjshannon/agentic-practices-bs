@@ -982,3 +982,47 @@ exactly as much attention as a real outage would have, and buys nothing.
 **Second-order.** The instrument here was the *audit framework itself*: the tool the estate uses to
 detect this class of failure had the failure. Periodically point your verification discipline at
 your verification tooling, because nothing else will.
+
+## An instrument that scopes itself by "most recent" is correct only while you are alone
+
+*2026-07-29*
+
+**Symptom.** A pacer that fires periodically to keep a long agent run honest also reports the
+run's context usage, because context exhaustion is what ends a run and the agent has no internal
+sense of it. It announced **"context 58%"**. The session was actually at **23.0%** — 229,697
+tokens of a 1M window, confirmed independently. The threshold for starting a wind-down was 60%.
+One more turn and a run with three quarters of its window left would have begun shutting down on
+a number belonging to something else.
+
+**Cause.** Two readings — context used, and how long since the human last spoke — each located
+"this session's transcript" as *the most recently modified transcript file on the machine*. That
+expression is correct exactly when one session is running. Two were. It had been reading the
+other session's numbers for the whole run, including a "human last spoke 0 min ago" for a human
+who had not spoken in this session at all.
+
+**Why it survived review.** The expression is not obviously wrong; it is *conditionally* right,
+and the condition — being the only session — is invisible, ambient, and usually true. Nothing
+about a wrong answer looks different from a right one: same shape, same units, plausible
+magnitude. A sibling tool on the same box already handled this correctly, refusing with an
+`AMBIGUOUS` error when it could not tell which session was meant, so the correct behaviour was
+sitting ten metres away and was not copied.
+
+**The rule.** **Identity, not recency.** Any instrument reporting on "this X" must select X by
+identifier, and when no identifier is available and the choice is genuinely ambiguous, it must
+**return nothing rather than pick**. The identifier usually already exists — here the harness
+exports a session id into every tool subprocess, so the process was carrying its own answer the
+whole time.
+
+**The refusal branch is the part to test.** Selecting correctly when the id is present is the easy
+half and it is what you will naturally check. Run the other one deliberately: strip the id, put
+two candidates in play, and confirm you get nothing back. An instrument that degrades to guessing
+under exactly the conditions that make guessing wrong is worse than one that never worked, because
+its output is trusted at precisely the moment it stops being trustworthy.
+
+**Second-order, and the reason this belongs here rather than in a changelog.** The same function
+already carried a comment recording an earlier wrong-context-percentage incident, ending with *"a
+wrong context % is worse than no context %: it is acted on."* The lesson had been learned, written
+down, and placed at the exact site of the recurrence — and it did not prevent the second instance,
+because it was a warning about a *value* and the new defect was in *scope selection*. A prose note
+at the scene of the crime is not a control. When a class of failure repeats, replace the note with
+a structural refusal.
