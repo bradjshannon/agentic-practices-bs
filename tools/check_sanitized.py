@@ -44,6 +44,23 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("machine-name", re.compile(r"\bIAISM-D04\b")),
     ("machine-name", re.compile(r"\bworkpc\b", re.IGNORECASE)),
     ("machine-name", re.compile(r"\bVIDEO\b")),  # the box named VIDEO (uppercase, as a label)
+    # ── The case gap the label patterns above cannot close ─────────────────────────────────
+    # A machine written as a LABEL is uppercase; the same machine written as a HOSTNAME is
+    # lowercase — and the hostname is the form that actually leaks, because it arrives inside a
+    # URL. Making the label patterns IGNORECASE is NOT the fix: `\bvideo\b` would then fire on
+    # the ordinary word in any lesson about audio/video, and a checker that cries wolf gets
+    # bypassed, taking its true positives with it (this repo's own doctrine).
+    #
+    # So match the SHAPE, not the name. Every Tailscale MagicDNS name ends in `.ts.net` and is
+    # private by construction; none belongs in a shareable repo. This also covers machines
+    # nobody has coined yet — which the "add it the day it is coined" instruction above cannot
+    # do, because that instruction requires someone to remember, and remembering is the class
+    # of control this repo exists to replace.
+    #
+    # Found 2026-07-29: a hook was hand-rejected for carrying a real tailnet host in a fallback
+    # URL, and this checker had passed it clean. Nothing else would have caught it.
+    ("host", re.compile(r"\b[a-z0-9-]+\.ts\.net\b", re.IGNORECASE)),
+    ("host", re.compile(r"\btail[0-9a-f]{6,}\b", re.IGNORECASE)),  # the tailnet id itself
     ("operator", re.compile(r"\baiadmin\b")),
     ("operator-path", re.compile(r"/home/aiadmin\b")),
     ("operator-path", re.compile(r"C:\\Users\\brads", re.IGNORECASE)),
