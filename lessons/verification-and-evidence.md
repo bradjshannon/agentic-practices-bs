@@ -903,3 +903,44 @@ of 1,081,668 B, which turned every check against that endpoint into a silent cou
 engines, alert conditions, monitoring queries — eventually gets asked to assert a *negative*. That
 is precisely where an empty result set and a satisfied condition become indistinguishable, and
 where the grader is most likely to be trusted because it is green.
+
+## A best-effort shim that always exits 0 turns a hard failure into permanent data loss
+
+*2026-07-29*
+
+**Symptom.** Two devices had firmware images nobody could reproduce. One board's crash dumps were
+permanently undecodable — no debug symbols archived for the build it was running. Another board
+showed a 29 KB memory regression that could not be attributed, because the image it replaced could
+not be rebuilt. Both looked like process neglect: somebody forgot to archive.
+
+**What actually happened.** Nobody forgot. A post-build hook uploaded the symbols on *every* build,
+the server **rejected every upload** with a 400, and the hook ended in a bare `exit 0`. The
+rejection was real and even printed — into build output nobody reads — and the build reported
+success. The rejection itself was correct: the version string exceeded a hard field limit imposed
+by the target's firmware header, and the server refused rather than silently truncate an identifier
+used for update comparison. So a well-designed refusal, a well-intentioned best-effort uploader, and
+a log nobody tails combined into months of silent, unrecoverable loss.
+
+**Why the "best-effort" framing is the trap.** `exit 0` was deliberate: the author did not want a
+symbol-upload failure to break a build. That instinct is right and the implementation inverts it.
+The cost of a failed upload is not paid at build time — it is paid weeks later, by whoever needs the
+symbols and no longer can get them. Best-effort is only honest when the effort's *failure* is
+cheap. Here it was catastrophic and deferred, which is the worst combination: nobody feels it when
+it happens, and nobody can fix it when they do.
+
+**The rule.** For any side-effect whose failure is discovered *later than* the run that caused it,
+`exit 0` on failure is not resilience — it is data loss with a success message. Either fail the
+operation, or make the failure impossible to ignore at the point where the artifact is *consumed*
+rather than produced. The gate that finally caught this refused to *flash* an image whose symbols
+were not archived, which is the right layer: the consumer of the guarantee, not the producer.
+
+**Ask this of every "best effort" path:** *who finds out, and when?* If the answer is "someone else,
+much later, when it is too late to fix", the path needs to fail loudly now. A corollary worth
+stating separately: **printing an error and exiting 0 is indistinguishable from success to every
+automated caller**, and automated callers are the only ones that exist in a build pipeline.
+
+**Why it generalises.** Retry wrappers that give up quietly, telemetry uploads that drop on 4xx,
+cache warmers, backup jobs, index rebuilds, log shippers — all of them are usually written
+best-effort, and all of them have the same shape: the failure is invisible at the time and
+expensive at consumption. The absence of the artifact is the only evidence, and absence is exactly
+what nobody checks.
