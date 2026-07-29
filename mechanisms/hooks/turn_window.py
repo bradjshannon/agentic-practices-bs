@@ -81,19 +81,39 @@ def human_text_of(entry: dict) -> str | None:
     return None
 
 
+def window(transcript_path: str) -> tuple[list[dict], int]:
+    """(all entries, index where the current turn begins).
+
+    The boundary is the ONE thing every Stop check needs identically and got wrong identically.
+    Callers that need something the ``turn()`` dict does not expose (edited paths, raw blobs,
+    timestamps) take (entries, start) from here and do their own extraction over
+    ``entries[start:]`` — so the private-boundary bug cannot be reintroduced by a new hook, which
+    was the whole point of extracting this.
+    """
+    entries = load(transcript_path)
+    start = 0
+    for i in range(len(entries) - 1, -1, -1):
+        if human_text_of(entries[i]) is not None:
+            start = i
+            break
+    return entries, start
+
+
+def human_start(transcript_path: str) -> tuple[list[dict], int, str]:
+    """(entries, start, the human's words) — window() plus the human text at the boundary."""
+    entries, start = window(transcript_path)
+    human = human_text_of(entries[start]) or "" if entries else ""
+    return entries, start, human
+
+
 def turn(transcript_path: str) -> dict:
     """{'said', 'human', 'tool_results', 'tool_calls', 'start'} for the current turn.
 
     `said` is the assistant's own text since the human last genuinely spoke; `tool_results` is
     the concatenated tool output in that same window; `tool_calls` counts tool_use blocks.
     """
-    entries = load(transcript_path)
-    start, human = 0, ""
-    for i in range(len(entries) - 1, -1, -1):
-        got = human_text_of(entries[i])
-        if got is not None:
-            start, human = i, got
-            break
+    entries, start = window(transcript_path)
+    human = (human_text_of(entries[start]) or "") if entries else ""
 
     said, results, calls = [], [], 0
     for e in entries[start:]:
