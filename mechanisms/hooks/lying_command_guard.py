@@ -213,15 +213,28 @@ def check(cmd: str):
     #    it. So this walks RAW tracking quote state and fires only on a substitution that
     #    is genuinely live (inside double quotes, or unquoted).
     if re.search(r"\b(reply|note-find|note-review|name-thread|mark-active|mark-msg)\.py\b", raw):
+        # A QUOTED heredoc body is inert: `<<'PY'` and `<<"PY"` both disable every
+        # expansion inside, so a backtick there is literal text. Only a BARE `<<PY`
+        # expands. Strip quoted-heredoc bodies before walking, or this fires on the
+        # exact form the fix text recommends -- and a guard that cries wolf on the
+        # correct form is how it gets switched off, taking its true positives with it.
+        # (Caught the day it was written: the first status-page reply written the
+        # recommended way was blocked by its own guard.)
+        scan = re.sub(
+            r"<<-?\s*(['\"])([A-Za-z_][A-Za-z0-9_]*)\1.*?^\s*\2\s*$",
+            "<<HEREDOC_ELIDED",
+            raw,
+            flags=re.S | re.M,
+        )
         state, live = None, False   # state: None | "'" | '"'
         i = 0
-        while i < len(raw):
-            ch = raw[i]
+        while i < len(scan):
+            ch = scan[i]
             if state is None and ch in "'\"":
                 state = ch
             elif state is not None and ch == state:
                 state = None
-            elif state != "'" and (ch == "`" or raw.startswith("$(", i)):
+            elif state != "'" and (ch == "`" or scan.startswith("$(", i)):
                 live = True
                 break
             i += 1
@@ -239,7 +252,135 @@ def check(cmd: str):
                 "Then read the last line of the JSONL back and assert the text is intact.",
             ))
 
+    # N. A raw `git commit`. The COMPOSITE of commit-then-push lies even though every
+    #    individual exit code is correct: on 2026-07-29 a message containing an escaped
+    #    regex was parsed as a pathspec, the commit FAILED, the following `git push`
+    #    printed reassuring output, and the pair read exactly like success. Only
+    #    `git show HEAD:<file>` found the change still sitting in the index. The same
+    #    shape also sweeps a concurrent agent's staged paths into your commit -- seven
+    #    times in one project -- because `git add` reports nothing about what else was
+    #    already staged.
+    #
+    #    commit_verify.py exists and verifies the POSTCONDITIONS (paths staged and
+    #    nothing else; HEAD moved; HEAD's tree really contains each path; remote ref
+    #    equals HEAD). Nothing made anyone use it, and "I'll remember to" is the
+    #    Voluntary class -- the one the enforcement table says reliably decays. So the
+    #    reminder moves to the action, where it also reaches a subagent that has read
+    #    no brief. The block text is therefore the whole teaching moment and must be
+    #    self-contained.
+    #
+    #    THREE DELIBERATE LIMITS, each so the guard cannot cry wolf:
+    #      * It fires ONLY if commit_verify.py is actually resolvable on this machine,
+    #        so a block always names a command that exists. The guard's own rule is that
+    #        a block naming no valid replacement converts one wrong turn into two.
+    #      * `--amend` is EXEMPT. commit_verify cannot express an amend, so blocking one
+    #        would leave nothing to recommend.
+    #      * `commit` must be git's SUBCOMMAND token, found by walking argv past git's
+    #        global options -- not a substring. `git commit-graph`, `git commit-tree`,
+    #        `git log --grep=commit` and `git show`/`status` must all pass through. This
+    #        is the trap the flash gate hit with `flash` inside `app-flash`.
+    #    Push is intentionally NOT blocked: a bare push of work committed earlier is
+    #    legitimate, and push verification comes along free when commit_verify commits.
+    if "commit_verify" not in raw:
+        script = commit_verify_path()
+        if script:
+            # Quoted spans collapse to a single placeholder TOKEN rather than to
+            # whitespace here. shell_only() blanks them, which would turn
+            # `git -C "C:/a b" commit` into `git -C   commit` and make -C swallow the
+            # word `commit` -- a silent miss on exactly the quoted-path form that is
+            # normal on Windows. A placeholder keeps the argv shape intact while still
+            # hiding quoted DATA (`echo "git commit is bad"` stays a no-fire).
+            argvish = (QUOTED.sub(" Q ", HEREDOC.sub(" ", raw)) + " ; "
+                       + QUOTED.sub(" Q ", nested_payloads(raw)))
+            for segment in re.split(r"[;\n]|&&|\|\|", argvish):
+                if _git_subcommand(segment) != "commit":
+                    continue
+                if re.search(r"(?<![\w-])--amend(?![\w-])", segment):
+                    continue
+                # Read the repo path out of RAW, not out of `argvish` -- the placeholder
+                # substitution above turns a quoted path into the literal token `Q`, and
+                # the first live block printed `--repo Q`. A block message that names a
+                # command with a WRONG argument is worse than no block, so this is read
+                # from the untouched text and unquoted by hand.
+                m = re.search(r"\bgit\s+-C\s+(\"[^\"]*\"|'[^']*'|\S+)", raw)
+                repo = m.group(1).strip("\"'") if m else "<repo>"
+                problems.append((
+                    "Raw `git commit`. The commit can FAIL while the surrounding sequence "
+                    "still reads as success -- a message parsed as a pathspec, a hook "
+                    "rejection, an empty index -- and the `git push` after it then pushes "
+                    "nothing and prints reassuring output. Every exit code is correct for "
+                    "its own command; the COMPOSITE is what lies. `git add` also stages "
+                    "silently alongside whatever a concurrent agent already staged.",
+                    "Use commit_verify.py, which fails loudly unless it has OBSERVED: the "
+                    "named paths staged and nothing else, HEAD moved, HEAD's tree really "
+                    "containing each path, and (with --push) origin equal to HEAD --\n"
+                    f"      python {script} --repo {repo} \\\n"
+                    "        --path <file> --path <file> <<'MSG'\n"
+                    "      your commit message\n"
+                    "      MSG\n"
+                    "    The message arrives on stdin, so backticks/quotes/backslashes in "
+                    "prose can never be reparsed as arguments. Paths are explicit -- no "
+                    "wildcards, ever. Add --push only when you mean to push; add "
+                    "--allow-extra-staged only if you are certain the extra paths are yours. "
+                    "For an amend, a rebase fixup or anything it cannot express, append "
+                    "`# guard:ok`.",
+                ))
+                break
+
     return problems
+
+
+# git's own global options, the ones that take a VALUE. Needed so `git -C <path> commit`
+# and `git -c user.name=x commit` resolve to the subcommand `commit` rather than to the
+# option's argument.
+_GIT_GLOBAL_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace",
+                          "--exec-path", "--super-prefix"}
+
+
+def _git_subcommand(segment: str):
+    """Return git's subcommand token in this shell segment, or None.
+
+    Tokenising rather than substring-matching is the whole point: `git commit-graph`,
+    `git log --grep=commit` and `git show` all contain the letters `commit` somewhere,
+    and none of them creates a commit.
+    """
+    toks = segment.split()
+    try:
+        i = next(n for n, t in enumerate(toks)
+                 if t == "git" or t.endswith("/git") or t.endswith("\\git")) + 1
+    except StopIteration:
+        return None
+    while i < len(toks):
+        t = toks[i]
+        if t.startswith("-"):
+            if t in _GIT_GLOBAL_WITH_VALUE:
+                i += 2
+            else:
+                i += 1
+            continue
+        return t
+    return None
+
+
+def commit_verify_path():
+    """Locate commit_verify.py, or None if this machine has no copy.
+
+    A module-level function so the rule can be exercised in BOTH directions by a test
+    that swaps it out — the "script not reachable, so do not fire" branch is exactly the
+    one that would otherwise never be demonstrated.
+    """
+    env = os.environ.get("COMMIT_VERIFY")
+    if env and os.path.isfile(env):
+        return env
+    home = os.path.expanduser("~")
+    for cand in (
+        os.path.join(home, ".claude", "scripts", "commit_verify.py"),
+        os.path.join(home, "Documents", "GitHub", "agentic-practices-bs",
+                     "mechanisms", "scripts", "commit_verify.py"),
+    ):
+        if os.path.isfile(cand):
+            return cand
+    return None
 
 
 # Escape hatch. Every block MUST be overridable, or the guard becomes a wall rather than a
