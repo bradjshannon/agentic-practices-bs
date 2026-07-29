@@ -60,8 +60,17 @@ def git(repo: Path, *args: str, check: bool = True) -> str:
     # which raises on the em-dashes and arrows this project's messages and paths
     # are full of. errors="replace" so a decoding surprise degrades a diagnostic
     # string rather than aborting a half-staged commit.
-    p = subprocess.run(["git", "-C", str(repo), *args], capture_output=True,
-                       text=True, encoding="utf-8", errors="replace")
+    #
+    # core.quotepath=false is NOT cosmetic. With git's default (true) a path with
+    # any byte >0x7f comes back octal-escaped and quoted —
+    #   "r\303\251sum\303\251-\342\206\222.txt"
+    # — which never equals the path the caller passed in, so POSTCONDITION 1 and 3
+    # both report "not staged" / "not in HEAD" about files that ARE staged and ARE
+    # in HEAD. Measured 2026-07-29: it exits 1 with a factually false diagnosis and
+    # leaves the tree staged, i.e. the same half-done state by a different route.
+    p = subprocess.run(["git", "-C", str(repo), "-c", "core.quotepath=false", *args],
+                       capture_output=True, text=True,
+                       encoding="utf-8", errors="replace")
     if check and p.returncode != 0:
         raise Failed(f"git {' '.join(args[:2])} failed (exit {p.returncode}): "
                      f"{(p.stderr or p.stdout).strip()}")
@@ -120,7 +129,8 @@ def run(repo: Path, paths: list[str], message: str, *, push: bool,
     # the locale codec (cp1252 on Windows) and raise UnicodeEncodeError on the first
     # em-dash — AFTER the staging above, leaving exactly the half-done state this
     # tool exists to make impossible. Bytes in, bytes out, decoded explicitly.
-    p = subprocess.run(["git", "-C", str(repo), "commit", "-F", "-"],
+    p = subprocess.run(["git", "-C", str(repo), "-c", "core.quotepath=false",
+                        "commit", "-F", "-"],
                        input=message.encode("utf-8"), capture_output=True)
     if p.returncode != 0:
         err = (p.stderr or p.stdout or b"").decode("utf-8", "replace")
