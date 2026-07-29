@@ -1026,3 +1026,40 @@ down, and placed at the exact site of the recurrence — and it did not prevent 
 because it was a warning about a *value* and the new defect was in *scope selection*. A prose note
 at the scene of the crime is not a control. When a class of failure repeats, replace the note with
 a structural refusal.
+
+## "Cannot be reproduced" is not "does not exist"
+
+*2026-07-29*
+
+**Symptom.** Three crash dumps from an embedded board could not be symbolicated: the server had no
+debug binary matching the dumps' build hash. The build had come from a dirty working tree, so a
+rebuild from the same commit could not produce a byte-identical binary. Two separate people wrote
+the evidence off as permanently lost, and one of them — me — resolved the tracking card agreeing,
+on the argument that *a dirty tree is not reconstructible by definition*.
+
+That argument is correct. It also answers a question nobody asked. It is about **rebuilding** the
+artifact; the question was whether the artifact still **existed**. It did, in an old build
+directory, the whole time. Hashing every candidate binary on the machine — 54 of them, one command
+— found the match immediately.
+
+**Why the wrong answer was so comfortable.** It was *rigorous*. It cited a real property of the
+build system, it was stated in the vocabulary of reproducibility, and it produced a confident
+negative. A hand-wavy guess would have invited a check; a well-reasoned one closed the question.
+**A sound argument about the adjacent question is more dangerous than no argument**, because its
+soundness is what stops the search.
+
+**The rule.** When you conclude something is unrecoverable, state which of these you actually
+established, and notice if it is not the second:
+
+1. it cannot be **regenerated** — a claim about a process;
+2. it does not **exist anywhere** — a claim about the world, which needs a search.
+
+Only (2) justifies giving up, and (2) is almost always cheap to test: the artifact has an
+identifier (a hash, an id, a filename), so enumerate the candidates and compare. Minutes, and it
+either recovers the evidence or upgrades the claim from an inference to a measurement.
+
+**Generalises past build artifacts.** The same conflation retires a deleted record because the
+source system has moved on, a log because the process that emitted it is gone, a dataset because
+the pipeline changed. The producer being irreproducible says nothing about whether the output is
+still lying around. See also the sibling failure in the other direction — a search that returns
+nothing, read as an absence in the world rather than a fact about the search.
