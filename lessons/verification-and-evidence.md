@@ -1063,3 +1063,44 @@ source system has moved on, a log because the process that emitted it is gone, a
 the pipeline changed. The producer being irreproducible says nothing about whether the output is
 still lying around. See also the sibling failure in the other direction — a search that returns
 nothing, read as an absence in the world rather than a fact about the search.
+
+### Addendum, same instrument, one hour later: it was also reading its own echo
+
+The pacer above had a second defect, found while confirming the first fix. Its
+"how long since the human spoke" reading classified messages by SHAPE — a user-role entry
+whose content is a plain string was taken as genuine input, versus a list-shaped one
+(a tool result being fed back). That test is not sufficient, because the harness writes
+several kinds of machine-generated message **in the user role with plain-string content**:
+the wrapper that starts a scheduled run, every background-task completion notification,
+turn-end hook feedback, injected system reminders.
+
+Measured: the session's transcript held **six** such entries and **none was the human**.
+One run-start wrapper, four task-notifications, one hook block. The person had not typed
+anything in an hour.
+
+**The shape of the failure is a feedback loop, and that is what makes it worth writing down.**
+The pacer fires → its own completion notification lands as a user-role entry → the next read
+reports "the human spoke 0 minutes ago" → the ladder stays on its tightest rung → it fires
+again. The instrument was being driven by its own output, and it pinned itself to maximum
+frequency *precisely when nobody was there* — burning the exact resource it exists to
+conserve. Every individual reading was internally consistent; nothing looked wrong.
+
+**Two rules.**
+
+- **Classify by origin, not by shape.** Shape is a proxy for provenance and proxies drift as
+  the platform adds message kinds. Match on the markers the machine actually emits.
+- **When an instrument's own actions produce inputs to that instrument, say so explicitly and
+  check the loop.** Self-observation is not automatically wrong, but it needs to be noticed —
+  here nobody had, because the two roles (thing that fires, thing that measures quiet) lived
+  in one file and looked unrelated.
+
+**And a note on the fallback, which is where the first instinct is wrong.** With every entry
+filtered out there is nothing left to timestamp, and the tempting answer is "unknown". It is
+not unknown: no human message anywhere in the transcript *is* the measurement — the person has
+been silent since the session began. Falling back to the session's own start time turns a
+discarded null into a real number, and it is the one that lets the interval stretch honestly.
+
+**Caveat worth carrying with the fix:** stretching the interval is only safe because a
+separate always-armed watcher notifies within a second when the human does write. Fix the
+measurement and lengthen the interval on the strength of it, and you have quietly made the
+pacer the sole listener again — which is the failure this system had already paid for once.
