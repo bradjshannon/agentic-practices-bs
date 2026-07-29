@@ -121,6 +121,31 @@ with Sandbox() as s:
     check("--message-file subject identical to stdin route",
           s.head_subject(), "subject — with an arrow → in it")
 
+# --- THE SECOND REGRESSION: non-ASCII PATHS ------------------------------------------------
+# Found 2026-07-29 while verifying the message fix above, and NOT covered by it: the encoding
+# fix made git's output decode cleanly, but git still ESCAPED it. With core.quotepath at its
+# default (true), any path byte >0x7f comes back as
+#     "r\303\251sum\303\251-\342\206\222.txt"
+# which never equals the path the caller passed, so POSTCONDITION 1 said "not staged" and
+# POSTCONDITION 3 said "HEAD does not contain" about a file that was staged and did land in
+# HEAD. Exit 1, false diagnosis, tree left staged -- the same half-done state by another route.
+#
+# This case is why the assertion below reads HEAD with quotepath EXPLICITLY off: asserting
+# through the default would reproduce the bug inside the test and pass either way.
+NON_ASCII_PATH = "résumé-→.txt"
+
+with Sandbox() as s:
+    s.write(NON_ASCII_PATH, "content\n")
+    rc, out, err = run_cv(s.repo, [NON_ASCII_PATH], NON_ASCII)
+    check("non-ASCII PATH commits (not just a non-ASCII message)", rc, 0)
+    check("  ... and the postcondition did not falsely claim 'not staged'",
+          "not staged" in err, False)
+    in_head = git(s.repo, "-c", "core.quotepath=false",
+                  "show", "--pretty=", "--name-only", "HEAD")[1]
+    check("  ... and the path really is in HEAD, unescaped", in_head, NON_ASCII_PATH)
+    check("  ... and nothing was left staged", s.staged(), set())
+
+
 # --- REFUSALS. The load-bearing half. ------------------------------------------------------
 # Each asserts BOTH a non-zero exit AND that HEAD did not move. Exit code alone would pass
 # on a version that committed and then complained.
