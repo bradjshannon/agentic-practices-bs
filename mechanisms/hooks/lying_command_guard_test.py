@@ -9,8 +9,12 @@ import importlib.util
 import pathlib
 import sys
 
+# Loads the guard RELATIVE TO THIS FILE, i.e. the banked copy in this repo. It used to load
+# from ~/.claude/hooks/, which meant a machine could pull a broken banked hook and still get a
+# green run -- the suite proved something about the INSTALLED copy and nothing about the one in
+# version control. `evidence_with_claim_test.py` had it right all along; this follows it.
 spec = importlib.util.spec_from_file_location(
-    "g", pathlib.Path.home() / ".claude" / "hooks" / "lying_command_guard.py")
+    "g", pathlib.Path(__file__).resolve().parent / "lying_command_guard.py")
 g = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(g)
 

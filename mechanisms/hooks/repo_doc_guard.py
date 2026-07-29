@@ -14,7 +14,7 @@ Design contract:
 
 Reads hook input as JSON on stdin: {tool_input:{file_path|notebook_path}, transcript_path, ...}
 """
-import sys, os, json
+import sys, os, json, glob
 
 # "any"  -> reading at least one guidance doc satisfies the gate (default: in these repos
 #           one doc is canonical per scope and cross-references the other, so reading either
@@ -28,7 +28,24 @@ def allow():
     sys.exit(0)
 
 
-def deny(reason, transcript_path=None, repo_root=None, subagent_likely=False):
+def _log(trigger, transcript_path=None, repo_root=None, agent_id=None, extra=None):
+    # agent_id is logged on every event. Without it the 2026-07-27 workflow-agent denies could
+    # not be attributed to an actor -- four fires, one victim, and the log could not say which
+    # of ~20 concurrent agents it was. An unattributable fire is half a datum.
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import hook_log
+        row = {"repo": os.path.basename(repo_root) if repo_root else None,
+               "agent_id": agent_id}
+        if extra:
+            row.update(extra)
+        hook_log.record("repo_doc_guard", trigger=str(trigger)[:120],
+                        transcript_path=transcript_path, extra=row)
+    except Exception:
+        pass
+
+
+def deny(reason, transcript_path=None, repo_root=None, subagent_likely=False, agent_id=None):
     # transcript_path is what hook_log derives the SESSION from. Omitting it logged
     # `"session": null` on every fire, which made hook_rollup report this hook's 32 fires --
     # the loudest signal in the event log -- as `unknown 32, sessions 0`: it could not
@@ -39,15 +56,8 @@ def deny(reason, transcript_path=None, repo_root=None, subagent_likely=False):
     # a fire -- so 41 logged fires could not be told apart by repo. Same shape as a `tail`
     # that drops the disambiguating line. `repo` is logged as its OWN field, never inside
     # truncatable prose.
-    try:
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        import hook_log
-        hook_log.record("repo_doc_guard", trigger=str(reason)[:120],
-                        transcript_path=transcript_path,
-                        extra={"repo": os.path.basename(repo_root) if repo_root else None,
-                               "subagent_likely": subagent_likely})
-    except Exception:
-        pass
+    _log(reason, transcript_path=transcript_path, repo_root=repo_root, agent_id=agent_id,
+         extra={"subagent_likely": subagent_likely})
     if subagent_likely:
         # A BLOCK MUST NAME A REPLACEMENT THAT ACTUALLY WORKS. For a subagent this hook is
         # handed the PARENT session's transcript (measured 2026-07-22: every deny raised
@@ -158,9 +168,22 @@ def actor_transcript(data):
     because "the payload doesn't tell us who is acting" was a NEGATIVE assumption that pruned
     the search and was never checked.
 
-    Falls back to the parent transcript when there is no `agent_id` (the top-level session is
-    itself an actor) or when the per-agent file cannot be found — fail-open on discovery, since
-    the alternative is denying an actor for a reason it cannot act on.
+    The flat path is not the only layout. Workflow-orchestrated (Claude Agent SDK-spawned)
+    agents write their transcripts one level deeper:
+        <session>/subagents/workflows/<wf_runId>/agent-<agent_id>.jsonl
+    Measured 2026-07-27 after four denies against a workflow agent that had Read the repo's
+    CLAUDE.md three times: the flat candidate did not exist, so this function silently fell
+    back to the PARENT transcript — recreating the exact false-deny mode the 2026-07-22 fix
+    was for, with the same "remedy that cannot succeed" message. The fallback-to-parent was
+    the bug: for an actor with an agent_id, the parent transcript is always the WRONG file,
+    so "fall back" meant "deny for an unfixable reason". Hence the contract below.
+
+    Returns:
+      * the actor's own transcript path when it can be located (flat first, then a recursive
+        glob under subagents/ so future nesting schemes are found without another regression);
+      * the parent transcript when there is no agent_id (the top-level session is the actor);
+      * None when the actor HAS an agent_id but no transcript can be found anywhere — the
+        caller must FAIL OPEN on None (allow, log), never substitute the parent's file.
     """
     parent = fix_msys(data.get("transcript_path") or "")
     agent_id = data.get("agent_id")
@@ -168,7 +191,13 @@ def actor_transcript(data):
         return parent
     session_dir = os.path.splitext(parent)[0]  # <session>.jsonl -> <session>/
     candidate = os.path.join(session_dir, "subagents", f"agent-{agent_id}.jsonl")
-    return candidate if os.path.exists(candidate) else parent
+    if os.path.exists(candidate):
+        return candidate
+    matches = glob.glob(os.path.join(session_dir, "subagents", "**",
+                                     f"agent-{agent_id}.jsonl"), recursive=True)
+    if matches:
+        return sorted(matches)[0]  # agent ids are unique; sort only for determinism
+    return None
 
 
 def collect_read_paths(transcript_path):
@@ -213,7 +242,18 @@ def main():
     if any(target_abs == dp for _, dp in docs):
         allow()  # editing the guidance doc itself is fine
 
-    read = collect_read_paths(actor_transcript(data))
+    actor_path = actor_transcript(data)
+    if actor_path is None:
+        # A delegated agent is acting but its transcript is nowhere under the session dir, so
+        # "did it read the docs?" is unanswerable. FAIL-OPEN per the design contract: denying
+        # here would hand the actor a remedy (Read-then-retry) that cannot work, which is how
+        # agents learn to route around guards. Logged so the blind spot stays visible.
+        _log("fail-open: actor transcript unlocatable",
+             transcript_path=data.get("transcript_path"), repo_root=repo_root,
+             agent_id=data.get("agent_id"), extra={"event": "fail_open"})
+        allow()
+
+    read = collect_read_paths(actor_path)
     unread = [name for name, dp in docs if dp not in read]
 
     satisfied = (len(unread) < len(docs)) if REQUIRE == "any" else (len(unread) == 0)
@@ -232,6 +272,7 @@ def main():
         # parent's in this payload, so anything stronger would be a claim the data does not
         # support -- and a hook asserting something false is worse than one saying nothing.
         subagent_likely=_transcript_has_agent_dispatch(data.get("transcript_path")),
+        agent_id=data.get("agent_id"),
     )
 
 

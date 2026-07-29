@@ -1,6 +1,11 @@
 import json, os, subprocess, sys, tempfile
 
-HOOK = os.path.expanduser("~/.claude/hooks/requirement_before_mechanism.py")
+# The hook UNDER TEST is the banked copy next to this file, not `~/.claude/hooks/`. Until
+# 2026-07-29 it was the latter, which made a green run a statement about whatever happened to be
+# installed on the machine running the suite — the banked file could be broken and this would
+# still pass, and the banked file is the one another machine pulls.
+HOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                    "requirement_before_mechanism.py")
 
 
 def transcript(assistant_text, edits):
@@ -62,3 +67,7 @@ print(f"{'ok  ' if ok else 'FAIL'} want=ALLOW got={got:5}  stop_hook_active (mus
 
 print()
 print(f"{len(cases) + 1 - fails}/{len(cases) + 1} passed, {fails} failed")
+# Exit non-zero on failure. Until 2026-07-29 this file printed "N failed" and then exited 0,
+# so any runner keying on the exit code saw a pass — the same "reports success while
+# demonstrating nothing" shape the ledger exists to catch.
+sys.exit(1 if fails else 0)

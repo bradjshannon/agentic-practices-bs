@@ -7,8 +7,11 @@ similar.
 import importlib.util
 import pathlib
 
+# Relative to THIS file = the banked copy in this repo. Loading from ~/.claude/hooks/ (as this
+# did until 2026-07-29) makes a green run a statement about the installed hook, not about what
+# another machine would pull.
 spec = importlib.util.spec_from_file_location(
-    "g", str(pathlib.Path.home() / ".claude" / "hooks" / "lying_command_guard.py"))
+    "g", str(pathlib.Path(__file__).resolve().parent / "lying_command_guard.py"))
 g = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(g)
 

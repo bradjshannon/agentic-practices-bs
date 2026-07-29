@@ -43,25 +43,6 @@ import os
 import re
 import sys
 
-
-def _record(trigger: str, transcript_path, extra: dict) -> None:
-    """Bank this fire to ~/.claude/hook-events.jsonl. Best-effort, never raises.
-
-    Wired 2026-07-22 alongside lying_command_guard/repo_doc_guard. Defined before its
-    call site (run-4 lesson: instrumenting call-sites before the helper NameErrors on
-    every fire in between).
-    """
-    try:
-        hooks_dir = os.path.dirname(os.path.abspath(__file__))
-        if hooks_dir not in sys.path:
-            sys.path.insert(0, hooks_dir)
-        from hook_log import record
-        record("requirement_before_mechanism", trigger=trigger,
-               transcript_path=transcript_path, extra=extra)
-    except Exception:
-        pass
-
-
 # Only these extensions count as "source". Docs/tests/config are exempt on purpose.
 SOURCE_EXT = {".py", ".cpp", ".hpp", ".c", ".h", ".ts", ".tsx", ".js", ".jsx", ".rs", ".go"}
 
@@ -85,23 +66,18 @@ def is_source(path: str) -> bool:
 
 
 def current_turn(transcript_path: str):
-    """(assistant_text, edited_source_paths) since the last real user message."""
+    """(assistant_text, edited_source_paths) since the last real user message.
+
+    The turn boundary comes from the shared window (which excludes <task-notification> and other
+    machine markers); only the edit-scan is local. The old local boundary loop treated a
+    notification as human input and reset the turn there.
+    """
     try:
-        with open(transcript_path, encoding="utf-8", errors="replace") as fh:
-            entries = [json.loads(line) for line in fh if line.strip()]
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from turn_window import window
+        entries, start = window(transcript_path)
     except Exception:
         return "", []
-
-    # Walk back to the last genuine user message. A user entry whose content is a plain
-    # string is real input; a list-shaped one is usually a tool_result being fed back.
-    start = 0
-    for i in range(len(entries) - 1, -1, -1):
-        e = entries[i]
-        if e.get("type") == "user":
-            content = (e.get("message") or {}).get("content")
-            if isinstance(content, str) and content.strip():
-                start = i
-                break
 
     text_parts, edited = [], []
     for e in entries[start:]:
@@ -155,7 +131,12 @@ def main() -> int:
         "edit genuinely does not warrant one (mechanical rename, typo, revert), say "
         "'requirement:ok' and why."
     )
-    _record(", ".join(sorted(set(edited))[:3]), transcript, {"event": "fired"})
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import hook_log
+        hook_log.record("requirement_before_mechanism", trigger=";".join(sorted(set(edited))[:3]), transcript_path=transcript)
+    except Exception:
+        pass
     print(json.dumps({"decision": "block", "reason": reason}))
     return 0
 

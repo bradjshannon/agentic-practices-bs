@@ -10,7 +10,17 @@ The two failures being guarded against are opposites, and the silent one is the 
 A test suite that only covers the deny case would pass while the guard is inert, so the
 false-ALLOW case is the load-bearing one here.
 
-Run:  py -3 ~/.claude/hooks/repo_doc_guard_test.py
+Run:  py -3 mechanisms/hooks/repo_doc_guard_test.py
+
+TARGET (changed 2026-07-29): the hook UNDER TEST is the banked copy next to this file, not
+`~/.claude/hooks/`. It was the latter, which meant a green run described whatever was installed
+on the machine and said nothing about what another machine would pull from this repo.
+
+EXIT CODES: 0 = passed, 1 = failed, 2 = NOT RUN. The third one is new and is the point: this
+suite needs a real repo with a guidance doc on disk, and when that repo is absent it used to
+print SKIP and exit **0** — permanently green on any machine lacking the repo, while
+demonstrating nothing. That is the same disease as the `archive-elf.ps1` failure at the top of
+GUARD-LEDGER.md. A suite that cannot run must not be able to report success.
 """
 import json
 import os
@@ -19,7 +29,7 @@ import subprocess
 import sys
 import tempfile
 
-HOOK = os.path.expanduser("~/.claude/hooks/repo_doc_guard.py")
+HOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "repo_doc_guard.py")
 CMD = ["py", "-3", "-c",
        f"import runpy;runpy.run_path(r'{HOOK}',run_name='__main__')"]
 H = runpy.run_path(HOOK)
@@ -63,8 +73,14 @@ def check(name, got, want):
 
 
 if not os.path.exists(DOC):
-    print(f"SKIP: {DOC} missing — cannot run these against a real repo")
-    sys.exit(0)
+    # NOT RUN, not PASS. Exit 2 so a runner keying on the exit code cannot mistake an
+    # un-runnable suite for a green one -- 0 and 1 are already spoken for by pass and fail,
+    # and a third code is the only way "I could not check" stays distinguishable from
+    # "I checked and it was fine". A marker word alone is not enough: nothing reads stdout.
+    print(f"NOT RUN: {DOC} missing — these cases need a real repo with a guidance doc.")
+    print("NOT RUN is not a pass. Point REPO/DOC at a repo on this machine, or run this "
+          "suite on one that has it.")
+    sys.exit(2)
 
 # --- top-level session (no agent_id): unchanged behaviour ------------------------------------
 check("parent never read -> DENY", run([json.dumps({})]), True)
@@ -100,8 +116,25 @@ if os.path.normcase(picked) != os.path.normcase(sub_file):
     FAILURES.append(f"actor_transcript picked {picked}, want {sub_file}")
 if H["actor_transcript"]({"transcript_path": parent}) != parent:
     FAILURES.append("actor_transcript should return the parent when there is no agent_id")
-if H["actor_transcript"]({"transcript_path": parent, "agent_id": "aMISSING"}) != parent:
-    FAILURES.append("actor_transcript should fall back to parent when the agent file is absent")
+# CONTRACT CHANGE, recorded rather than quietly re-pointed. This assertion used to require
+# actor_transcript to FALL BACK TO THE PARENT when an agent_id's transcript could not be found,
+# and it was the suite's one standing failure. The hook deliberately stopped doing that: for an
+# actor that HAS an agent_id the parent transcript is always the wrong file, so "fall back"
+# meant "deny for a reason the actor cannot act on" -- the false-deny mode that made two agents
+# route around the guard. The hook now returns None and the caller FAILS OPEN. The test was
+# asserting the old behaviour, so the test is what moved. Both halves of the new contract are
+# asserted here, because "returns None" alone would pass on a function that returns None always.
+if H["actor_transcript"]({"transcript_path": parent, "agent_id": "aMISSING"}) is not None:
+    FAILURES.append("actor_transcript must return None (not the parent) when the actor has an "
+                    "agent_id but no locatable transcript — the caller fails open on None")
+# ...and a nested workflow layout must still be FOUND rather than reported unlocatable.
+wf = os.path.join(tmp, "session", "subagents", "workflows", "run1")
+os.makedirs(wf, exist_ok=True)
+nested = os.path.join(wf, "agent-aNEST.jsonl")
+open(nested, "w").close()
+if os.path.normcase(H["actor_transcript"]({"transcript_path": parent, "agent_id": "aNEST"}) or "") \
+        != os.path.normcase(nested):
+    FAILURES.append("actor_transcript should find a nested subagents/workflows/<run>/ transcript")
 
 if FAILURES:
     print(f"FAIL ({len(FAILURES)}):")
