@@ -944,3 +944,41 @@ cache warmers, backup jobs, index rebuilds, log shippers — all of them are usu
 best-effort, and all of them have the same shape: the failure is invisible at the time and
 expensive at consumption. The absence of the artifact is the only evidence, and absence is exactly
 what nobody checks.
+## The tool computed the finding, then threw it away before printing
+
+*2026-07-29*
+
+**Symptom.** A live infrastructure audit reported `PASSED`. The report object it had just built
+said `overall_status: "fail"` and carried a high-severity finding — a backup heartbeat 102 hours
+stale against a 25-hour threshold. Both statements came from the same function call, seconds apart.
+Nobody had been lied to by a stale cache or a skipped check: the check ran, found the problem, and
+the problem never reached a human.
+
+**What actually happened.** The test collected findings from two sources — a main evaluator and
+some supplemental remote checks — and merged them into one report. Its print statements covered
+only the *supplemental* branch, because that branch had been added later and the author printed
+what he had just written. The main report was never rendered. Separately, the assertion that would
+have failed on a blocking finding was gated behind an opt-in flag that operators did not pass. So
+the run's exit status answered "did the test execute" and its output answered "what did the
+supplemental checks say," and neither question was the one anyone was asking.
+
+**The rule.** **A diagnostic's output is part of its contract, not a convenience.** When a tool
+computes a judgement and then prints a subset of it, the unprinted part does not exist. Verify the
+output surface the way you would verify a return value: make it emit the whole judgement, state the
+overall verdict explicitly, and say *"no findings"* out loud rather than printing nothing — because
+an empty output and a healthy result are the same pixels. Corollary: if the strict assertion is
+behind a flag, the un-flagged path must still *report* loudly, or the flag becomes the only thing
+that works and the default becomes decoration.
+
+**Why it generalises.** This is the cheap-green failure with a new disguise: not a stale cache, not
+a check that could not run, but a check that ran correctly and was silently truncated at the
+presentation boundary. It appears wherever computation and reporting are separated — linters that
+summarise only the first category, CI steps that echo one of several result files, dashboards that
+render the panel someone was debugging. The tell is cheapness: a "full audit" that finishes in
+eight seconds, a report with one line when the system has many subsystems. **Suspicion of a cheap
+green is the highest-yield detector available**, because the alternative — trusting it — costs
+exactly as much attention as a real outage would have, and buys nothing.
+
+**Second-order.** The instrument here was the *audit framework itself*: the tool the estate uses to
+detect this class of failure had the failure. Periodically point your verification discipline at
+your verification tooling, because nothing else will.
