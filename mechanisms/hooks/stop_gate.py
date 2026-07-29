@@ -15,7 +15,7 @@ much he has to read, and in its blocking path it was tripling it. A control whos
 directly negates its own purpose is worse than no control — it is a control arguing for its own
 removal.
 
-A SECOND, INDEPENDENT REASON — WINDOWS CONSOLE SPAM (workpc, 2026-07-27)
+A SECOND, INDEPENDENT REASON — WINDOWS CONSOLE SPAM (second Windows box, 2026-07-27)
 ------------------------------------------------------------------------------------------------
 Brad: *"some scheduled process on this machine now opens a dozen+ terminal windows in the
 foreground every few minutes."* On Windows, Claude Code spawns each hook `command` through

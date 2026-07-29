@@ -13,10 +13,24 @@ import tempfile
 
 HOOK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workflow_output_to_repo.py")
 
-# Paths must match this machine's REPO_FRAGMENTS, not the kit author's.
-REPO = "D:/GitHub/ai-research-bs/docs/reviews/x.md"
-SCRATCH = ("C:/Users/brads/AppData/Local/Temp/claude/D--GitHub-ai-research-bs"
+# Fictional paths on purpose. These assert PATH LOGIC -- "does this fragment match, is
+# this one rejected as non-durable" -- which never needed a real project name, and the
+# real ones leaked into a public repo until 2026-07-29. The durable-repo fragments come
+# from a TEMP config written below, never from the operator's real
+# ~/.claude/workflow-output-repos.conf: a test that reads the live config would pass or
+# fail for reasons that have nothing to do with this file.
+REPO = "C:/Users/example/github/example-project/docs/reviews/x.md"
+SCRATCH = ("C:/Users/example/AppData/Local/Temp/claude/C--github-example-project"
            "/abc/scratchpad/notes.md")
+
+# A repo the temp config does NOT list -- used to prove the config is what decides.
+UNLISTED = "C:/Users/example/github/some-other-repo/docs/x.md"
+
+_CONF = tempfile.NamedTemporaryFile("w", suffix=".conf", delete=False, encoding="utf-8")
+_CONF.write("# temp config for the test\n/github/example-project/\n\n# a family:\n"
+            "/github/example-platform-\n")
+_CONF.close()
+CONF_PATH = _CONF.name
 
 
 def entry(role, blocks):
@@ -27,15 +41,21 @@ def user_msg(text):
     return json.dumps({"type": "user", "message": {"content": text}})
 
 
-def run(entries, stop_active=False):
+def run(entries, stop_active=False, conf=CONF_PATH):
     with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False,
                                      encoding="utf-8") as fh:
         fh.write("\n".join(entries))
         path = fh.name
+    env = dict(os.environ)
+    if conf is None:
+        # Point at a path that cannot exist, to exercise the no-config fallback.
+        env["WORKFLOW_OUTPUT_REPOS_CONF"] = os.path.join(path + ".absent")
+    else:
+        env["WORKFLOW_OUTPUT_REPOS_CONF"] = conf
     try:
         payload = {"transcript_path": path, "stop_hook_active": stop_active}
         p = subprocess.run([sys.executable, HOOK], input=json.dumps(payload),
-                           capture_output=True, text=True)
+                           capture_output=True, text=True, env=env)
         out = (p.stdout or "").strip()
         return json.loads(out) if out else None
     finally:
@@ -116,6 +136,45 @@ r = run([
     entry("assistant", [{"type": "text", "text": "It is 3pm."}]),
 ])
 results.append(check("workflow in a previous turn -> quiet", r, False))
+
+# ── The config-loading path (added 2026-07-29 with the fragment list) ────────────────
+# The list of durable repos is machine-local config, not a literal in the hook. These
+# cases assert that the CONFIG is what decides -- otherwise a config that silently
+# failed to load would look exactly like a working one in every case above.
+
+# MUST NOT FIRE: a fragment written with a family prefix in the temp config.
+r = run([
+    user_msg("audit"),
+    entry("assistant", [{"type": "tool_use", "name": "Workflow", "input": {}}]),
+    entry("assistant", [{"type": "tool_use", "name": "Write",
+                         "input": {"file_path":
+                                   "C:/Users/example/github/example-platform-config/a.md"}}]),
+])
+results.append(check("config family fragment matches -> quiet", r, False))
+
+# MUST FIRE: a real repo write that the config does NOT list. This is the positive
+# control on the loader: if the config were ignored and something broad matched
+# everything, this case would go quiet and the suite would be measuring nothing.
+r = run([
+    user_msg("audit"),
+    entry("assistant", [{"type": "tool_use", "name": "Workflow", "input": {}}]),
+    entry("assistant", [{"type": "tool_use", "name": "Write",
+                         "input": {"file_path": UNLISTED}}]),
+])
+results.append(check("repo absent from config -> BLOCKS", r, True))
+
+# MUST NOT FIRE with NO config file at all: the fallback must leave a usable hook, not
+# an empty fragment list. An empty list would make every workflow turn block -- the
+# cry-wolf failure that gets a guard disabled.
+r = run([
+    user_msg("audit"),
+    entry("assistant", [{"type": "tool_use", "name": "Workflow", "input": {}}]),
+    entry("assistant", [{"type": "tool_use", "name": "Write",
+                         "input": {"file_path": REPO}}]),
+], conf=None)
+results.append(check("no config -> fallback still recognises a repo write", r, False))
+
+os.unlink(CONF_PATH)
 
 print()
 print(f"{sum(results)}/{len(results)} passed")

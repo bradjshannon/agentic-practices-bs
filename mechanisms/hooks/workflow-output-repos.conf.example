@@ -1,0 +1,27 @@
+# workflow-output-repos.conf -- machine-local data for workflow_output_to_repo.py
+#
+# Copy to ~/.claude/workflow-output-repos.conf and edit. One path fragment per line;
+# a write whose path contains any fragment (case-insensitive, / or \) counts as
+# "banked into a repo" and satisfies the Stop check. Blank lines and # are ignored.
+#
+# This file is intentionally NOT in the public repo with real values: the list names
+# the operator's actual projects. The hook ships the mechanism; the machine supplies
+# the names.
+#
+# Write fragments with leading AND trailing slashes to pin a whole repo, or leave the
+# trailing slash off to cover a family of sibling repos/worktrees by prefix.
+
+# A single repo, plus any worktrees nested inside it:
+/github/example-project/
+
+# A family: covers example-platform, example-platform-config, example-platform-backups...
+/github/example-platform-
+
+# Worktrees that live at the TOP LEVEL as siblings rather than under their parent repo.
+# Omitting a line like this is the silent-no-fire case: real work lands in
+# /github/example-wt-some-feature/ and would not match /github/example-platform- above.
+/github/example-wt-
+
+# Note what you do NOT need to list: scratchpad and temp paths are rejected by
+# NON_DURABLE in the hook regardless of what appears here. Writing findings to a temp
+# file is the failure this guard exists to catch, so it can never be configured away.

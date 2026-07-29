@@ -66,18 +66,50 @@ def _record(trigger: str, transcript_path, extra: dict) -> None:
 
 # A write under one of these counts as "in the repo". Kept as path fragments so it works
 # regardless of drive letter or checkout location.
-REPO_FRAGMENTS = (
-    # ARB -- covers its worktrees too, which nest under .claude/worktrees/ inside the repo.
-    "/github/ai-research-bs/",
-    # Platform + the config/backups/recovery snapshot repos (one fragment covers all six).
-    "/github/iai-xiaozhi-",
-    # IXP worktrees live at the TOP LEVEL as ixp-*, NOT under iai-xiaozhi-platform/.
-    # Omitting this is the silent-no-fire case the kit warns about: real IXP work lands
-    # in D:/GitHub/ixp-wt-unified-auth/ and friends and would not have matched.
-    "/github/ixp-",
-    # The agent-to-agent comms channel is itself a repo we do durable work in.
-    "/github/tailnet-comms-bs/",
-)
+#
+# WHY THIS IS CONFIGURATION AND NOT A LITERAL IN THIS FILE
+# -------------------------------------------------------
+# The list is inherently machine-specific: it is *which repos this operator does durable
+# work in*, which differs per box and names private projects. Hardcoding it here would
+# either leak those names into a public repo or, if scrubbed, leave the hook matching
+# nothing -- and a hook that matches nothing does not fail loudly, it silently stops
+# recognising real repo writes and blocks every workflow turn instead. That silent
+# mis-fire is the exact class of failure the rest of this file argues against.
+#
+# So: the MECHANISM ships here, the DATA lives next to the machine that knows it.
+# One fragment per line in the config file, blank lines and `#` comments ignored.
+# See workflow-output-repos.conf.example.
+CONF_ENV = "WORKFLOW_OUTPUT_REPOS_CONF"        # override the config path (tests use this)
+CONF_DEFAULT = "~/.claude/workflow-output-repos.conf"
+
+# Used when no config file exists. Deliberately BROAD rather than empty: an empty list
+# means "no write ever counts", which turns the guard into a blocker on every workflow
+# turn. A checkout-directory fragment keeps it roughly right on an unconfigured box, and
+# the operator narrows it by writing the config file.
+FALLBACK_FRAGMENTS = ("/github/",)
+
+
+def load_repo_fragments(conf_path: str | None = None) -> tuple[str, ...]:
+    """Read durable-repo path fragments from machine-local config.
+
+    Falls back to FALLBACK_FRAGMENTS when the file is absent or contains no entries,
+    so an unconfigured machine still gets a working hook rather than a silent one.
+    """
+    path = conf_path or os.environ.get(CONF_ENV) or os.path.expanduser(CONF_DEFAULT)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+    except OSError:
+        return FALLBACK_FRAGMENTS
+    frags = tuple(
+        s.lower().replace("\\", "/")
+        for s in (line.strip() for line in lines)
+        if s and not s.startswith("#")
+    )
+    return frags or FALLBACK_FRAGMENTS
+
+
+REPO_FRAGMENTS = load_repo_fragments()
 
 # These never satisfy the rule even though they are real writes -- writing the findings
 # to a temp file is precisely the thing that lost the audit.
