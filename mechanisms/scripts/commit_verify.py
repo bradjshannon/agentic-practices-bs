@@ -56,8 +56,12 @@ class Failed(Exception):
 
 def git(repo: Path, *args: str, check: bool = True) -> str:
     """Run one git command with an argv LIST — never a shell string."""
-    p = subprocess.run(["git", "-C", str(repo), *args],
-                       capture_output=True, text=True)
+    # UTF-8 explicitly, never the locale codec: on Windows the default is cp1252,
+    # which raises on the em-dashes and arrows this project's messages and paths
+    # are full of. errors="replace" so a decoding surprise degrades a diagnostic
+    # string rather than aborting a half-staged commit.
+    p = subprocess.run(["git", "-C", str(repo), *args], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
     if check and p.returncode != 0:
         raise Failed(f"git {' '.join(args[:2])} failed (exit {p.returncode}): "
                      f"{(p.stderr or p.stdout).strip()}")
@@ -112,11 +116,15 @@ def run(repo: Path, paths: list[str], message: str, *, push: bool,
               " with --allow-extra-staged if you are certain they are yours.")
 
     # ── commit, message via stdin ──────────────────────────────────────────────
+    # The message goes over the pipe as UTF-8 BYTES. text=True would encode it with
+    # the locale codec (cp1252 on Windows) and raise UnicodeEncodeError on the first
+    # em-dash — AFTER the staging above, leaving exactly the half-done state this
+    # tool exists to make impossible. Bytes in, bytes out, decoded explicitly.
     p = subprocess.run(["git", "-C", str(repo), "commit", "-F", "-"],
-                       input=message, capture_output=True, text=True)
+                       input=message.encode("utf-8"), capture_output=True)
     if p.returncode != 0:
-        raise Failed(f"commit failed (exit {p.returncode}): "
-                     f"{(p.stderr or p.stdout).strip()}")
+        err = (p.stderr or p.stdout or b"").decode("utf-8", "replace")
+        raise Failed(f"commit failed (exit {p.returncode}): {err.strip()}")
 
     # POSTCONDITION 2: HEAD actually moved. `git commit` can report success-ish
     # output in situations where it did not create a commit.
@@ -168,8 +176,12 @@ def main() -> int:
                          "Only when you are certain they are yours.")
     a = ap.parse_args()
 
+    # sys.stdin.read() decodes with the locale codec; on Windows that is cp1252 and
+    # a heredoc containing an em-dash dies before staging even begins. --message-file
+    # was already explicit about UTF-8; stdin now matches it, so the two input paths
+    # cannot disagree about the encoding of the same message.
     message = (Path(a.message_file).read_text(encoding="utf-8")
-               if a.message_file else sys.stdin.read())
+               if a.message_file else sys.stdin.buffer.read().decode("utf-8"))
     try:
         return run(Path(a.repo).resolve(), a.paths, message,
                    push=a.push, allow_extra_staged=a.allow_extra_staged)
