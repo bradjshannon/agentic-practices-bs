@@ -58,3 +58,47 @@ changed under the agent mid-run, without any signal.
 **Why it generalises.** Parallel agents against one repository is now the default, not the
 exception, and git's ergonomics assume a single human operator with one working copy in mind.
 Nothing in the tooling will warn you that the branch moved.
+
+## Parallel agents share one scratchpad, and a clobbered extraction reads exactly like a clean one
+
+*2026-07-29*
+
+**Symptom.** Four agents were dispatched in parallel, each to audit a different large transcript.
+Each began by extracting the parts it needed into intermediate files with the obvious names —
+`asst.txt`, `human.txt`, `shape.py`. Every agent inherited the **same scratchpad directory path**,
+so the names collided. One agent reported it plainly: its files *"were overwritten by a sibling
+mid-read (caught via timestamps); I clobbered theirs too. A sibling that didn't check may have
+analysed the wrong session's text."*
+
+**Why this is worse than the git-index race it resembles.** The root cause is identical — a shared
+mutable namespace plus concurrent writers — but the failure surface is not. A swept git commit
+leaves a diff someone can inspect. A clobbered extraction produces a **fluent, internally
+consistent analysis of the wrong subject**, with no error, no warning, and nothing in the output
+that distinguishes it from correct work. The agent cannot detect it from the inside; it reads a
+file it believes it owns.
+
+Two of the four caught it, both by the same accident: they noticed a file's modification time or a
+formatting signature they had not produced. Neither check was part of anyone's method.
+
+**The rule.**
+
+- **In any fan-out, every agent writes intermediate state to a directory unique to itself.** Put
+  the agent's own identifier in the path. This is one line in the brief and it removes the whole
+  class.
+- **Generic filenames in a shared directory are the hazard**, not the volume of writing. `asst.txt`
+  is the bug; `coldread-B/asst.txt` is not.
+- If you must reuse a shared path, `stat` it before reading back and compare against what you
+  wrote. A modification time you did not cause is the only signal available.
+- **Require disclosure either way.** A brief that asks "say whether you were affected" must also
+  demand an explicit *"checked, not affected"* — otherwise silence is ambiguous between a clean
+  run and an agent that never looked.
+
+**Note on isolation.** Git worktree isolation does **not** cover this. It isolates the repository
+working tree; the scratchpad is a separate shared resource and stays shared. Two different
+mechanisms are needed, and the presence of the first one invites the assumption that the second is
+handled.
+
+**Why it generalises.** Any per-session temporary directory that is derived from the *session*
+rather than the *agent* will be shared by that session's children. The moment a fan-out involves
+more than reading, the namespace is contended — and the contended resource that produces confident
+wrong answers is more dangerous than the one that produces conflicts.
