@@ -1104,3 +1104,43 @@ discarded null into a real number, and it is the one that lets the interval stre
 separate always-armed watcher notifies within a second when the human does write. Fix the
 measurement and lengthen the interval on the strength of it, and you have quietly made the
 pacer the sole listener again — which is the failure this system had already paid for once.
+
+## A claim's HOME decides whether it rots
+
+*2026-07-29*
+
+**Symptom.** An agent read a fact out of a project's own documentation, believed it, and used it to
+correct the human about his own hardware. The human was right; the document was nine days out of
+date. The maintained source — a separate reference the project keeps current — had retracted that
+exact claim, with a dated note, more than a week earlier.
+
+**What actually happened.** The project had **two homes for the same class of fact**, and only one of
+them was maintained. A living reference gets corrected when reality changes. A document that *quotes*
+that reference is a snapshot: correct on the day it was written, silently diverging every day after,
+and **indistinguishable from current** because staleness has no visual signature. The snapshot even
+looked *more* authoritative to an agent, because it was in the repo, in the working tree, one grep
+away — while the maintained source needed a deliberate detour to reach.
+
+**Why the usual defences miss it.** Nothing was wrong at the moment of writing, so review would have
+passed. No test covers prose. The fix that corrected the maintained source had no reason to know the
+snapshot existed, and no mechanism connected them. The failure is not that someone wrote something
+wrong; it is that **a correct copy was made and then diverged**, which is the ordinary fate of every
+copy.
+
+**The rule.** For any class of fact, name the single maintained home, and make every other mention
+**point** rather than **restate**. When you catch yourself copying a fact between documents, you are
+creating a future contradiction with an unknown expiry — copy the pointer instead. And when a
+maintained source and a local document disagree, the maintained one wins by default, without
+argument; the local one is evidence about the past.
+
+**The cheap structural version, which is what actually fixed it:** the entry-point document — the
+one every agent reads before starting — named several code repositories and *no* reference
+documentation at all. Adding a short table of "for facts of this kind, read this" costs nothing per
+run and removes the incentive to re-derive. Re-derivation is the real cost: it is slow, it looks like
+diligence, and it reproduces whichever stale copy it happens to land on.
+
+**Why it generalises past documentation.** Any duplicated fact has this shape — a constant hardcoded
+in two services, a schema restated in a client, a threshold repeated in an alert and a runbook, a
+version pinned in three manifests. The question is never "is this right?" but "**is this the home, or
+a copy of the home?**" A copy is not wrong; it is *unowned*, and unowned facts drift toward wrong at a
+rate nobody is measuring.
