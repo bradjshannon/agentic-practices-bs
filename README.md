@@ -40,6 +40,7 @@ repo is the source of truth.
 | [`lessons/verification-and-evidence.md`](lessons/verification-and-evidence.md) | Postconditions vs. exit codes, green signals that measure nothing, mutable fields as false evidence, and critic agents that confidently hallucinate |
 | [`lessons/build-and-artifacts.md`](lessons/build-and-artifacts.md) | Why an un-built artifact is an unverified one |
 | [`lessons/shared-state.md`](lessons/shared-state.md) | Concurrent agents against shared working copies |
+| [`lessons/commit-authorship-is-not-evidence-a-human-acted.md`](lessons/commit-authorship-is-not-evidence-a-human-acted.md) | An instrument with one possible output is not a measurement — `%an` when every agent commits as the user, and "no open lock" when the lock is held only during writes |
 | [`lessons/designing-the-problem-away.md`](lessons/designing-the-problem-away.md) | Choosing a mechanism over a procedure, and keying on signals that survive the environment changing |
 
 ## Mechanisms
