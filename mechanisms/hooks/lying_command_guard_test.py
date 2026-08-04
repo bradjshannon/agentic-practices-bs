@@ -1,61 +1,63 @@
-"""Positive AND negative controls for the writer-tool substitution guard.
+import runpy, os
 
-Lives in a file rather than on a command line on purpose: the fixtures below ARE the
-shapes the guard matches, so passing them as argv makes the guard fire on its own test
-run. That is a true positive on the text and a false positive on the intent -- worth
-recording, because it is the shape of every text-matching guard's blind spot.
-"""
-import importlib.util
-import pathlib
-import sys
+m = runpy.run_path(os.path.expanduser("~/.claude/hooks/lying_command_guard.py"))
+check = m["check"]
 
-# Loads the guard RELATIVE TO THIS FILE, i.e. the banked copy in this repo. It used to load
-# from ~/.claude/hooks/, which meant a machine could pull a broken banked hook and still get a
-# green run -- the suite proved something about the INSTALLED copy and nothing about the one in
-# version control. `evidence_with_claim_test.py` had it right all along; this follows it.
-spec = importlib.util.spec_from_file_location(
-    "g", pathlib.Path(__file__).resolve().parent / "lying_command_guard.py")
-g = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(g)
-
-TICK = chr(96)
-DOLLAR_PAREN = "$" + "("
-
-CASES = [
-    ("POSITIVE  backtick inside double quotes",
-     'python tools/reply.py other "the ' + TICK + 'cause' + TICK + ' field also takes '
-     + TICK + 'x' + TICK + '"', True),
-    ("POSITIVE  $(...) inside double quotes",
-     'python tools/reply.py other "value is ' + DOLLAR_PAREN + 'whoami) today"', True),
-    ("POSITIVE  unquoted backtick",
-     'python tools/note-find.py t tldr --detail ' + TICK + 'x' + TICK, True),
-    ("POSITIVE  note-review, double-quoted",
-     'python tools/note-review.py report --id x "a ' + TICK + 'sym' + TICK + '"', True),
-    # --- negatives: the guard must stay silent, or it cries wolf on the CORRECT form ---
-    ("NEGATIVE  single-quoted backtick is safe",
-     "python tools/reply.py other 'the " + TICK + "cause" + TICK + " field is safe'", False),
-    ("NEGATIVE  plain double-quoted prose",
-     'python tools/reply.py other "no substitution here at all"', False),
-    ("NEGATIVE  unrelated tool with a backtick",
-     'git commit -m "fixes ' + TICK + 'foo' + TICK + '"', False),
-    ("NEGATIVE  subprocess argv form (the recommended fix)",
-     "python - <<'PY'\nsubprocess.run([sys.executable, 'tools/reply.py', t, m])\nPY", False),
-    ("NEGATIVE  writer tool with no substitution at all",
-     "python tools/mark-active.py diagnostics 'working on the thing'", False),
+cases = [
+    # The EXACT command that failed on 2026-07-19 -- fully inside double quotes,
+    # which shell_only() strips. This is the case the rule must actually catch.
+    ("BLOCK", 'pwsh -NoProfile -Command ". .\\idf.ps1; idf.py build"'),
+    ("BLOCK", ". ./idf.ps1; idf.py -p COM7 flash"),
+    ("BLOCK", "Set-Location C:\\x; . .\\idf.ps1; idf.py app-flash"),
+    # Benign -- these MUST NOT fire. A guard that cries wolf gets disabled.
+    ("ALLOW", ".\\idf.ps1 build"),
+    ("ALLOW", ".\\idf.ps1 -p COM7 app-flash"),
+    ("ALLOW", "idf.py build"),  # legitimate inside an already-exported IDF shell
+    ("ALLOW", "grep -n idf.ps1 CLAUDE.md"),
+    ("ALLOW", "cat idf.ps1"),
+    # Nested-payload change: a real command inside -c/-Command must be seen...
+    ("BLOCK", 'bash -c "cd /tmp ' + "&& git log" + '"'),
+    ("BLOCK", "cd /tmp " + "&& git status"),
+    # ...but a quoted string that is DATA (a commit message describing a bad
+    # command) must NOT fire, or every docs commit about these traps is blocked.
+    ("ALLOW", 'git commit -m "docs: never run . .\\idf.ps1; idf.py build, it exits 0"'),
+    ("ALLOW", 'git commit -m "fix: use git -C instead of cd X ' + "&& git status" + '"'),
+    # context-usage filtering: the pipe must attach to an ACTUAL RUN of the script.
+    ("BLOCK", "python ~/.claude/context-usage.py | tail -3"),
+    ("BLOCK", "py -3 ~/.claude/context-usage.py | grep pct"),
+    # The two false positives observed on 2026-07-22 -- both MUST be allowed.
+    ("ALLOW", "grep -n window ~/.claude/context-usage.py | head -30"),  # reads the SOURCE
+    ("ALLOW", "python ~/.claude/turn-pacer.py | tail -8; python ~/.claude/context-usage.py"),
+    ("ALLOW", "python ~/.claude/context-usage.py"),  # unfiltered, the correct form
+    # 4b: bare cd, result unchecked, more commands follow -- the 2026-08-03 shape.
+    ("BLOCK", "mkdir conductor-pub\ncd conductor-pub\ngit init -b main"),
+    ("BLOCK", "cd /tmp; ls"),
+    ("BLOCK", "cd /tmp\ncat README.md"),
+    # Chained: a failed cd stops the rest (&&) or hits an explicit fallback (||) -- ALLOW.
+    ("ALLOW", "cd /tmp && ls"),
+    ("ALLOW", "cd /tmp || { echo failed; exit 1; }"),
+    # cd is the only/last statement -- nothing depends on it, ALLOW.
+    ("ALLOW", "cd /tmp"),
+    ("ALLOW", "mkdir /tmp/x && cd /tmp/x"),
+    # No cd at all -- the convention this rule is steering toward -- ALLOW.
+    ("ALLOW", "git -C /tmp status"),
+    ("ALLOW", "mkdir -p /tmp/x\ngit -C /tmp/x init -b main"),
+    # pins.jsonl: hand-rolled writes must BLOCK, reads and the real tool must ALLOW.
+    ("BLOCK", 'python -c "import json; f=open(r\'pins.jsonl\', \'a\'); f.write(json.dumps({}))"'),
+    ("BLOCK", "echo '{\"thread\": \"x\"}' >> conductors/iotta/pins.jsonl"),
+    ("BLOCK", 'Add-Content -Path pins.jsonl -Value \'{"thread": "x"}\''),
+    ("ALLOW", "grep -n uart-satellite conductors/iotta/pins.jsonl"),
+    ("ALLOW", "cat conductors/iotta/pins.jsonl"),
+    ("ALLOW", "python tools/pin-thread.py uart-satellite \"state text\""),
+    ("ALLOW", 'python -c "import json; print(json.dumps({}))"'),  # json.dumps with no pins.jsonl at all
 ]
 
-
-def fired(cmd: str) -> bool:
-    return any("writer tool" in p for p, _ in g.check(cmd))
-
-
-bad = 0
-for name, cmd, want in CASES:
-    got = fired(cmd)
+fails = 0
+for want, c in cases:
+    got = "BLOCK" if check(c) else "ALLOW"
     ok = got == want
-    bad += not ok
-    print(f"{'PASS' if ok else 'FAIL':4} | fired={str(got):5} want={str(want):5} | {name}")
+    fails += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} want={want:5} got={got:5}  {c}")
 
 print()
-print("ALL CORRECT" if not bad else f"{bad} WRONG")
-sys.exit(1 if bad else 0)
+print(f"{len(cases) - fails}/{len(cases)} passed, {fails} failed")

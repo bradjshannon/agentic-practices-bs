@@ -147,6 +147,47 @@ def check(cmd: str):
             "Use `git -C <path> ...` so the target is explicit.",
         ))
 
+    # 4b. A bare `cd <dir>` whose result is never checked, with more commands following that
+    #     assume it worked. `cd` can fail silently (typo, a directory not yet created because
+    #     an earlier command in the same turn never ran) and the shell just keeps executing
+    #     the rest of the script in the OLD cwd -- no error, no pause, nothing distinguishing
+    #     "cd worked" from "cd silently failed" until whatever runs next either breaks loudly
+    #     or, worse, succeeds quietly against the wrong directory.
+    #     Observed 2026-08-03: `mkdir conductor-pub` (in a command blocked before it ran) then,
+    #     in the NEXT command, `cd conductor-pub` / `git init` / `cat > README.md` / more --
+    #     four separate statements, no `&&`/`||` anywhere. The directory did not exist yet, cd
+    #     failed, and everything after ran against whatever repo happened to be cwd -- a
+    #     DIFFERENT real project, whose README.md and docs/decisions.md were overwritten.
+    #     Caught only by reading `git diff` afterward, not by anything at the point of damage.
+    #     This is rule 4's failure mode one step earlier: that rule catches `cd X && git ...`
+    #     specifically; this one catches the un-chained cd itself, for any command, so the
+    #     agent has a chance to react to the failure instead of finding out from a later diff.
+    for m in re.finditer(r"\bcd\s+(?:--\s+)?(\S+)", cmd):
+        target = m.group(1)
+        if target in ("-", ".", ".."):
+            continue  # returning to known-good ground, not entering unverified new ground
+        after = cmd[m.end():]
+        if re.match(r"\s*(&&|\|\|)", after):
+            continue  # chained: a failed cd either skips what follows or hits a fallback
+        remainder = re.split(r"[;\n]", after, maxsplit=1)
+        tail_same_line = remainder[0]
+        more_after = remainder[1] if len(remainder) > 1 else ""
+        if not tail_same_line.strip() and not more_after.strip():
+            continue  # cd is the last thing in the command; nothing depends on it
+        problems.append((
+            "`cd <dir>` result is never checked, and more commands follow assuming it "
+            "worked. A failed cd (typo, or a directory another command was supposed to "
+            "create first) leaves the shell in the OLD cwd with no error -- everything "
+            "after silently runs against the wrong directory. This overwrote a different "
+            "project's README.md and docs/decisions.md on 2026-08-03.",
+            "Chain the very next step so a failure stops the block: `cd <dir> && <next>`, "
+            "or check explicitly: `cd <dir> || { echo cd failed; exit 1; }`. Better still, "
+            "skip cd entirely -- pass the path explicitly to each command instead "
+            "(`git -C <dir> ...`, absolute paths for file writes) so nothing depends on "
+            "shell state carrying over at all.",
+        ))
+        break  # one report per command is enough; don't pile on for every cd in a script
+
     # 5. `. .\idf.ps1; idf.py ...` — idf.ps1 is a WRAPPER that invokes idf.py with your args,
     #    NOT an env script to dot-source. Dot-sourcing runs idf.py with NO args, prints the
     #    help, and EXITS 0 having built nothing; a background runner then reports "completed"
@@ -326,6 +367,49 @@ def check(cmd: str):
                     "`# guard:ok`.",
                 ))
                 break
+
+    # N. A hand-rolled write to a conductor's pins.jsonl. This is the exact shape that
+    #    produced a stale thread pin on 2026-08-03: `written_at` typed by hand (wrong, missing,
+    #    or copy-pasted stale), a field name typo invisible to the writer but invisible to the
+    #    resolver too, and no verification that the pin now reads fresh against the real inbox.
+    #    tools/pin-thread.py exists specifically to make those three failures structurally
+    #    impossible (real timestamp, correct fields, self-verifying write) -- see its docstring.
+    #    Match on the filename plus an append/write shape, not on "pins.jsonl" alone, so a
+    #    command that merely READS the file (grep, cat, python -c "print(open(...).read())")
+    #    is not blocked -- only something that looks like it is constructing a JSON line by
+    #    hand and appending it.
+    # Checked against BOTH the stripped `cmd` and the untouched `raw`: a heredoc body (the
+    # realistic vector -- `python - <<'PY' ... PY`) is stripped by HEREDOC as "probably prose"
+    # for every other rule, which would make this one blind to the exact shape that caused the
+    # 2026-08-03 incident. The tradeoff this accepts: a heredoc/commit-message that merely
+    # DESCRIBES this pattern in prose could false-positive here where other rules would not --
+    # judged acceptable because the fix (`# guard:ok`) is one token and this failure mode is
+    # narrow (pins.jsonl specifically, not a general string).
+    def _pins_write_shape(text: str) -> bool:
+        if not re.search(r"pins\.jsonl", text):
+            return False
+        return bool(
+            re.search(r"pins\.jsonl['\"]?\s*,\s*['\"]a", text)          # open(path, "a"...)
+            or re.search(r">>\s*['\"]?[^|;]*pins\.jsonl", text)          # shell append redirect
+            or re.search(r"json\.dumps", text)                          # building the JSON by hand
+            or re.search(r"Add-Content|Out-File\s+-Append", text, re.I)  # PowerShell append
+        )
+
+    if (_pins_write_shape(cmd) or _pins_write_shape(raw)) and "pin-thread.py" not in raw:
+            problems.append((
+                "Hand-rolled write to pins.jsonl. This is the exact shape that produced a "
+                "stale thread pin on 2026-08-03 -- a hand-typed (or omitted) `written_at`, "
+                "a field-name typo the resolver silently ignores, and no check that the pin "
+                "now actually reads as fresh.",
+                "Use tools/pin-thread.py, which always writes a real current timestamp in the "
+                "exact form the resolver expects, uses the correct field set, and re-reads the "
+                "file afterward to confirm the thread now verifies NOT STALE against the live "
+                "inbox before it reports success --\n"
+                "      python tools/pin-thread.py <thread> \"<state, 1-3 sentences>\"\n"
+                "    Use `python tools/pin-thread.py --check <thread>` to see a verdict without "
+                "writing anything. For a one-off migration or test fixture that genuinely needs "
+                "a raw line, append `# guard:ok`.",
+            ))
 
     return problems
 
