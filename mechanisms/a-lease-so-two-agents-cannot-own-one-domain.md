@@ -21,7 +21,7 @@ proof of solitude. The instrument could not have said "someone is here" for most
 | `conductor-bs/tools/test_conductor_lease.py` | 15 tests, mutation-verified |
 | `conductor-bs/tools/conductor-identity.py` | Names the commit author so `%an` stops meaning "a human" |
 | `conductor-bs/tools/test_conductor_identity.py` | 9 tests, incl. that the human's own commits stay theirs |
-| `ai-research-bs/scripts/conductor/Start-ServerConductor.ps1` | Calls both at preflight |
+| a launcher script in the project the conductor runs for, e.g. `scripts/conductor/Start-<Role>Conductor.ps1` | Calls both at preflight |
 
 ## The design decisions that are load-bearing
 
