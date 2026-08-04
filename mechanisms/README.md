@@ -4,6 +4,10 @@
 holds the things that stop it happening — hooks, scripts, skills, wrappers, automations —
 in a form another agent can copy and run.
 
+For *where* each kind of thing here actually lives — the machine copy vs. the repo copy, and
+what (if anything) keeps them in sync — see
+[`WHERE-MECHANISMS-LIVE.md`](WHERE-MECHANISMS-LIVE.md).
+
 Brad, 2026-07-22: *"I want every conductor to be able to write notes, process improvements,
 mechanisms, hooks, skills, scripts, etc. into that repo, so every other conductor can benefit
 on the next run."*
