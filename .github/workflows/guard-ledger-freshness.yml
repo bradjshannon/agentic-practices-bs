@@ -1,0 +1,20 @@
+name: guard-ledger-freshness
+
+# Make GUARD-LEDGER.md's staleness Instrumented instead of Voluntary: run the test file each
+# row cites and fail if it no longer passes. See tools/check_guard_ledger_freshness.py and
+# mechanisms/WHERE-MECHANISMS-LIVE.md for why this exists and what it does not catch.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check-guard-ledger-freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Re-verify every GUARD-LEDGER.md row against its cited test
+        run: python3 tools/check_guard_ledger_freshness.py
