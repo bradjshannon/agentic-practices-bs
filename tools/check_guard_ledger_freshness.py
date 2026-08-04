@@ -162,7 +162,26 @@ def _loads_from_machine(src: str) -> bool:
                 return True
     return False
 
-PASS, STALE, UNRUNNABLE, COUPLED = "PASS", "STALE", "UNRUNNABLE", "COUPLED"
+PASS, STALE, UNRUNNABLE, COUPLED, VACUOUS = "PASS", "STALE", "UNRUNNABLE", "COUPLED", "VACUOUS"
+
+
+def _is_vacuous_under_direct_run(src: str) -> bool:
+    """A pytest-shaped file with no `if __name__ == '__main__'` entry point.
+
+    This script's whole method is `python <cited test file>`. A file that defines `def test_...`
+    functions and nothing that CALLS them exits 0 having asserted nothing -- and this script would
+    report the row FRESH. That is the `archive-elf.ps1` failure at the top of GUARD-LEDGER.md,
+    reproduced by the tool built to prevent it.
+
+    Found live 2026-08-04: `revive_before_dispatch_test.py` is 169 lines, 12 `def test_` functions,
+    24 asserts, zero prints, no `__main__` guard -- `python revive_before_dispatch_test.py` prints
+    nothing and exits 0. No ledger row cites it today, so nothing was actually being mis-reported;
+    the hole was one citation away from mattering, which is exactly when it is cheap to close.
+
+    A file WITH a `__main__` guard is fine however it is shaped -- the guard is what makes direct
+    execution mean something, whether it hand-rolls its cases or shells out to pytest.
+    """
+    return bool(re.search(r"^def test_", src, re.M)) and "__main__" not in src
 
 
 def _run_test(path: Path) -> tuple[str, str]:
@@ -182,6 +201,11 @@ def _run_test(path: Path) -> tuple[str, str]:
         return COUPLED, ("loads its subject from ~/.claude, so a green run describes the INSTALLED "
                          "copy and this repo's banked copy could be broken unnoticed. Load it "
                          "relative to the test file instead (Path(__file__).parent).")
+    if _is_vacuous_under_direct_run(src):
+        return VACUOUS, ("defines `def test_` functions but has no `if __name__ == \"__main__\"` "
+                         "entry point, so `python <file>` runs NONE of them and exits 0. A green "
+                         "here would mean nothing. Add a __main__ guard (hand-rolled, or "
+                         "`raise SystemExit(pytest.main([__file__]))`).")
     try:
         proc = subprocess.run(
             [sys.executable, str(path)],
@@ -227,9 +251,11 @@ def main() -> int:
     verdicts: list[str] = []
 
     # Worst wins: a row citing one stale test and one unrunnable test is STALE, not UNRUNNABLE.
-    _RANK = {PASS: 0, UNRUNNABLE: 1, COUPLED: 2, STALE: 3}
-    _LABEL = {PASS: "FRESH", UNRUNNABLE: "UNRUNNABLE", COUPLED: "COUPLED", STALE: "STALE"}
-    _BUCKET = {UNRUNNABLE: unrunnable_rows, COUPLED: coupled_rows, STALE: stale_rows}
+    _RANK = {PASS: 0, UNRUNNABLE: 1, VACUOUS: 2, COUPLED: 3, STALE: 4}
+    _LABEL = {PASS: "FRESH", UNRUNNABLE: "UNRUNNABLE", VACUOUS: "VACUOUS",
+              COUPLED: "COUPLED", STALE: "STALE"}
+    _BUCKET = {UNRUNNABLE: unrunnable_rows, VACUOUS: coupled_rows,
+               COUPLED: coupled_rows, STALE: stale_rows}
 
     for row in rows:
         label = _guard_label(row)
@@ -266,7 +292,7 @@ def main() -> int:
     # One summary line, used by every exit path, so no path can report a partial picture. The
     # out-of-scope count is on it because a denominator the reader cannot see is not a denominator.
     summary = (f"{len(rows)} in-scope row(s): {fresh} fresh, {len(stale_rows)} stale, "
-               f"{len(coupled_rows)} machine-coupled, {len(unrunnable_rows)} unrunnable here, "
+               f"{len(coupled_rows)} machine-coupled-or-vacuous, {len(unrunnable_rows)} unrunnable here, "
                f"{len(unverifiable_rows)} no-test. "
                f"{out_of_scope} further ledger row(s) are OUTSIDE this script's scope "
                f"(the guard is not under mechanisms/hooks/) and were never checked.")
@@ -281,7 +307,7 @@ def main() -> int:
     if hard:
         print(f"GUARD-LEDGER.md: {len(hard)} row(s) failed:\n")
         for v in verdicts:
-            if v.startswith(("STALE", "COUPLED")) or (args.strict and v.startswith("UNRUNNABLE")):
+            if v.startswith(("STALE", "COUPLED", "VACUOUS")) or (args.strict and v.startswith("UNRUNNABLE")):
                 print(v)
         print(f"\nFix, by verdict:")
         print(f"  STALE      -- re-verify the guard, update its row (evidence + Date), or remove "
@@ -289,6 +315,8 @@ def main() -> int:
         print(f"  COUPLED    -- the cited test loads its subject from ~/.claude. Retarget it to "
               f"load next to itself; until then the row's evidence is about a file this repo does "
               f"not own.")
+        print(f"  VACUOUS    -- the cited test asserts nothing when run directly. Its green is not "
+              f"evidence of anything, which is the failure this ledger opens with.")
         if args.strict:
             print(f"  UNRUNNABLE -- this environment cannot run the test (no checkout, no "
                   f"harness). Not a ledger defect. Run without --strict to ignore.")
