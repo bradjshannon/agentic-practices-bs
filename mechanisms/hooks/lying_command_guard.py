@@ -368,50 +368,99 @@ def check(cmd: str):
                 ))
                 break
 
-    # N. A hand-rolled write to a conductor's pins.jsonl. This is the exact shape that
-    #    produced a stale thread pin on 2026-08-03: `written_at` typed by hand (wrong, missing,
-    #    or copy-pasted stale), a field name typo invisible to the writer but invisible to the
-    #    resolver too, and no verification that the pin now reads fresh against the real inbox.
-    #    tools/pin-thread.py exists specifically to make those three failures structurally
-    #    impossible (real timestamp, correct fields, self-verifying write) -- see its docstring.
-    #    Match on the filename plus an append/write shape, not on "pins.jsonl" alone, so a
-    #    command that merely READS the file (grep, cat, python -c "print(open(...).read())")
-    #    is not blocked -- only something that looks like it is constructing a JSON line by
-    #    hand and appending it.
+    # N. A hand-rolled write to any of a conductor's status-page data files. This is the exact
+    #    shape that produced a stale thread pin on 2026-08-03: `written_at` typed by hand (wrong,
+    #    missing, or copy-pasted stale), a field name typo invisible to the writer but invisible to
+    #    the resolver too, and no verification that the row now reads as intended.
+    #
+    #    Each of these files has exactly ONE sanctioned writer, and every one of them now re-reads
+    #    the file after appending and confirms the row RESOLVES the way a reader will see it
+    #    (pin-thread.py against `_pin_staleness`; note-review.py against latest-per-id + retires;
+    #    note-find.py against `resolved_state`/`needs_overrides`/`text_overrides`/`check_overrides`;
+    #    reply.py against `_replies_for`/`replies_by_message`). A hand-rolled append gets none of
+    #    that -- it cannot even tell you the row landed in the directory the page reads.
+    #
+    #    Originally pins.jsonl only. Widened 2026-08-03 after a sweep found the same unverified
+    #    append shape in three more tools: naming ONE file taught the lesson about that file rather
+    #    than about the class, and a hand-rolled write to finds.jsonl sailed through untouched.
+    #
+    #    THE EXEMPTION IS PER FILE, not global. `pin-thread.py` appearing anywhere in the command
+    #    must not license a hand-rolled write to finds.jsonl -- so each filename is excused only by
+    #    ITS OWN sanctioned writer.
+    #
+    # Match on the filename PLUS a write shape, not the filename alone, so a command that merely
+    # READS the file (grep, cat, `python -c "print(open(...).read())"`) is not blocked. `json.dumps`
+    # additionally requires a write verb: `print(json.dumps(...))` over finds.jsonl is a perfectly
+    # ordinary inspection, and it is common enough that firing on it would make this guard cry wolf
+    # on the busiest file in the set. (The pins-only version of this rule fired on bare
+    # `json.dumps`; that was tolerable when it named one rarely-read file and is not now.)
+    #
     # Checked against BOTH the stripped `cmd` and the untouched `raw`: a heredoc body (the
     # realistic vector -- `python - <<'PY' ... PY`) is stripped by HEREDOC as "probably prose"
     # for every other rule, which would make this one blind to the exact shape that caused the
     # 2026-08-03 incident. The tradeoff this accepts: a heredoc/commit-message that merely
     # DESCRIBES this pattern in prose could false-positive here where other rules would not --
-    # judged acceptable because the fix (`# guard:ok`) is one token and this failure mode is
-    # narrow (pins.jsonl specifically, not a general string).
-    def _pins_write_shape(text: str) -> bool:
-        if not re.search(r"pins\.jsonl", text):
-            return False
-        return bool(
-            re.search(r"pins\.jsonl['\"]?\s*,\s*['\"]a", text)          # open(path, "a"...)
-            or re.search(r">>\s*['\"]?[^|;]*pins\.jsonl", text)          # shell append redirect
-            or re.search(r"json\.dumps", text)                          # building the JSON by hand
-            or re.search(r"Add-Content|Out-File\s+-Append", text, re.I)  # PowerShell append
-        )
-
-    if (_pins_write_shape(cmd) or _pins_write_shape(raw)) and "pin-thread.py" not in raw:
-            problems.append((
-                "Hand-rolled write to pins.jsonl. This is the exact shape that produced a "
-                "stale thread pin on 2026-08-03 -- a hand-typed (or omitted) `written_at`, "
-                "a field-name typo the resolver silently ignores, and no check that the pin "
-                "now actually reads as fresh.",
-                "Use tools/pin-thread.py, which always writes a real current timestamp in the "
-                "exact form the resolver expects, uses the correct field set, and re-reads the "
-                "file afterward to confirm the thread now verifies NOT STALE against the live "
-                "inbox before it reports success --\n"
-                "      python tools/pin-thread.py <thread> \"<state, 1-3 sentences>\"\n"
-                "    Use `python tools/pin-thread.py --check <thread>` to see a verdict without "
-                "writing anything. For a one-off migration or test fixture that genuinely needs "
-                "a raw line, append `# guard:ok`.",
-            ))
+    # judged acceptable because the fix (`# guard:ok`) is one token and the match is narrow.
+    for _fname, _tool, _how in _CONDUCTOR_JSONL_WRITERS:
+        if _tool in raw:
+            continue                       # the sanctioned writer FOR THIS FILE is doing the write
+        if not (_jsonl_write_shape(cmd, _fname) or _jsonl_write_shape(raw, _fname)):
+            continue
+        problems.append((
+            f"Hand-rolled write to {_fname}. This is the exact shape that produced a stale "
+            f"thread pin on 2026-08-03 -- a hand-typed (or omitted) timestamp, a field-name typo "
+            f"the resolver silently ignores, and no check that the row now actually reads the way "
+            f"the page will render it. The write reports success either way.",
+            f"Use tools/{_tool}, which writes a real current timestamp in the exact form the "
+            f"resolver expects, uses the correct field set, and RE-READS the file afterward to "
+            f"confirm the row resolves as intended before it reports success --\n"
+            f"      {_how}\n"
+            f"    For a one-off migration or a test fixture that genuinely needs a raw line, "
+            f"append `# guard:ok`.",
+        ))
 
     return problems
+
+
+# The status-page data files and the ONE sanctioned writer for each: (filename, tool, example).
+# Every tool named here re-reads its file after appending and confirms the row resolves the way a
+# reader will see it -- which is the property a hand-rolled append cannot have and the reason this
+# table exists. Adding a new append-only jsonl to a conductor's data dir means adding a row here
+# and giving it a self-verifying writer, in that order.
+_CONDUCTOR_JSONL_WRITERS = (
+    ("pins.jsonl", "pin-thread.py",
+     'python tools/pin-thread.py <thread> "<state, 1-3 sentences>"'),
+    ("review.jsonl", "note-review.py",
+     'python tools/note-review.py <kind> --id <card-id> "<title>" "<body>"'),
+    ("finds.jsonl", "note-find.py",
+     'python tools/note-find.py "<title>" "<one-line tldr>"   (--resolve/--reopen/--rewrite '
+     'to change one)'),
+    ("replies.jsonl", "reply.py",
+     'python tools/reply.py <thread> "<what you want to say to Brad>"   (--to <msg> to answer '
+     'a message)'),
+)
+
+# A write VERB, required alongside `json.dumps` before that counts as a write. `print(json.dumps(
+# ...))` is a reader; `f.write(json.dumps(...))` and `p.write_text(... json.dumps(...))` are not.
+_JSONL_WRITE_VERB = re.compile(
+    r"\.write\s*\(|\bwrite_text\s*\(|>>|Add-Content|Out-File\s+-Append", re.I)
+
+
+def _jsonl_write_shape(text: str, fname: str) -> bool:
+    """Does `text` look like it is constructing and appending a row to `fname` BY HAND?
+
+    False for anything that merely reads the file -- that distinction is the whole reason this
+    matches on a write shape rather than on the filename.
+    """
+    if fname not in text:
+        return False
+    esc = re.escape(fname)
+    return bool(
+        re.search(esc + r"['\"]?\s*,\s*['\"]a", text)            # open(path, "a"...)
+        or re.search(r">>\s*['\"]?[^|;]*" + esc, text)            # shell append redirect
+        or re.search(r"(?:Add-Content|Out-File\s+-Append)", text, re.I)   # PowerShell append
+        or (re.search(r"json\.dumps", text) and _JSONL_WRITE_VERB.search(text))
+    )
 
 
 # git's own global options, the ones that take a VALUE. Needed so `git -C <path> commit`
