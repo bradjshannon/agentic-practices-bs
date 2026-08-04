@@ -123,3 +123,27 @@ Still genuinely open, and Brad's call rather than a drafting detail: whether opt
 per-mechanism or per-*class* (declining "all Interrupt-class hooks" is a coherent preference and a
 much shorter file); and whether `sync: auto` is permitted at all for hooks, given the standing rule
 that a wrong guessed direction silently destroys whichever side was edited more recently.
+
+### The question is not academic — it was answered empirically, badly, the day it was asked
+
+Looking for the third instrument's shape, 2026-08-04, three findings turned up on one workstation
+that no existing check covers, and each is a different *kind* of not-up-to-par:
+
+- **A repo's own pre-commit gates were not installed.** A project whose brief states in the present
+  tense that a doc-check "rejects any commit that puts an item ID in this file" had a seven-hook
+  `.pre-commit-config.yaml` and no `.git/hooks/pre-commit` at all. Nothing watches this: the
+  installed-mechanisms report reads the *harness's* hooks directory, not any repo's. So a mechanism
+  the ledger classes **Structural** was Voluntary here, and its class was never wrong in the
+  ledger — it was wrong *on this machine*, which the ledger's format cannot express.
+- **A pre-run check silently stopped answering half of what it checks.** Its repo list held absolute
+  paths from a different machine's clone root, so it reported three repos "not cloned" while all
+  three were cloned and one was the repo it was running from. "Absent" and "elsewhere" rendered
+  identically for long enough that the WARN became background noise.
+- **A live instrument had drifted in without being recorded.** Regenerating the installed report
+  picked up a hook wired on two events that the repo's record of the machine did not mention.
+
+Three different failures, one shape: **nothing compares what is running against what was intended,
+because nothing writes down what was intended.** That is the manifest's whole job, and it is why
+the recommendation above is to build the declared-intent column rather than a new subsystem — two
+of these three would have been caught by a manifest plus a diff, with no new checking machinery at
+all. The third (git hooks) needs one new probe, which is `.git/hooks/` per declared repo.
