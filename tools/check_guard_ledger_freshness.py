@@ -43,8 +43,46 @@ hole, and the ones that hurt are the ones nobody wrote down)
   MISSING rather than "renamed, still fine" — the fix there is renaming the citation, not this
   script guessing at it.
 
+THREE HOLES FOUND 2026-08-04 AND CLOSED HERE (each had already cost something)
+------------------------------------------------------------------------------
+1. **"Could not run HERE" was indistinguishable from "the claim went stale."** A test that needs
+   something this machine does not have — a real repo on disk, an installed harness — exited
+   non-zero and was reported STALE, which is a statement about the LEDGER. Measured by running
+   this script with HOME pointed at an empty directory (a stand-in for the CI runner):
+   `18 row(s): 11 fresh, 4 stale, 3 no-test`, where all four "stale" were environmental. The CI
+   workflow shipped alongside this script was therefore RED on every push from the day it landed,
+   for reasons that had nothing to do with any ledger row going stale — and a check that is always
+   red is a check nobody reads, which is this repo's own stated reason for caring about false
+   positives. Exit code **2** now means "not runnable in this environment" (the convention
+   `repo_doc_guard_test.py` already used and nothing consumed), reported as UNRUNNABLE, never
+   silently folded into either PASS or STALE, and always named in the summary line so it cannot
+   become a reassuring null. `--strict` makes them fail, for a caller that wants that.
+
+2. **A cited test could load the guard from the MACHINE instead of from this repo, and this script
+   would call it FRESH.** `lying_command_guard_test.py` did exactly that: it loaded
+   `~/.claude/hooks/lying_command_guard.py` while GUARD-LEDGER.md's row for it had claimed since
+   2026-07-29 that it had been retargeted to the banked copy. Three rows cited that file, so three
+   rows' evidence described a file this repo does not own. That is the hook-drift hole
+   `WHERE-MECHANISMS-LIVE.md` names, arriving inside the ledger that was supposed to catch it.
+   Now checked structurally: a cited test that loads from `~/.claude` is MACHINE-COUPLED and fails,
+   because a green run of such a test says nothing about the banked copy.
+
+3. **Rows outside `mechanisms/hooks/` were silently out of scope.** The `LEDGER_ROW` pattern only
+   matches rows whose Guard cell starts `mechanisms/hooks/`, so rows for guards in sibling repos
+   and in `mechanisms/scripts/` were never counted, never checked, and never mentioned. The final
+   line read "all N test-backed rows still pass" with an N the reader had no way to know excluded
+   others. The count is now reported.
+
+WHAT IS STILL NOT CHECKED, AND DELIBERATELY SO
+-----------------------------------------------
+Whether a mechanism is INSTALLED AND WIRED on the machine you are sitting at. That is a different
+question with a different answer, and folding it in here would make both worse — a row's claim is
+about this repo, and it does not become acceptable-to-fail because a given workstation opted out of
+the guard. See `mechanisms/WHERE-MECHANISMS-LIVE.md`.
+
 USAGE
     python tools/check_guard_ledger_freshness.py            # scan, exit 1 on any stale/missing row
+    python tools/check_guard_ledger_freshness.py --strict   # ...and on any UNRUNNABLE row too
     python tools/check_guard_ledger_freshness.py --list     # show every row's verdict, exit 0
 """
 from __future__ import annotations
@@ -80,9 +118,20 @@ def _ledger_table_text() -> str:
     return rest[: end.start()] if end else rest
 
 
-def _rows() -> list[str]:
+def _rows() -> tuple[list[str], int]:
+    """Return (in-scope rows, count of table rows this script does NOT check).
+
+    The second half exists because the out-of-scope count used to be invisible: rows for guards in
+    sibling repos and in `mechanisms/scripts/` are legitimately not runnable from here, but the
+    summary line said "all N test-backed rows still pass" with an N that quietly excluded them.
+    A denominator nobody can see is the same defect as a green light nobody can see behind.
+    """
     table = _ledger_table_text()
-    return [line for line in table.splitlines() if LEDGER_ROW.match(line)]
+    lines = [ln for ln in table.splitlines() if ln.startswith("|")]
+    body = [ln for ln in lines if not re.match(r"^\|[\s:|-]+\|?\s*$", ln)
+            and not ln.startswith("| Guard ")]
+    scoped = [ln for ln in body if LEDGER_ROW.match(ln)]
+    return scoped, len(body) - len(scoped)
 
 
 def _guard_label(row: str) -> str:
@@ -90,20 +139,65 @@ def _guard_label(row: str) -> str:
     return m.group(1) if m else row[:60]
 
 
-def _run_test(path: Path) -> tuple[bool, str]:
-    """Run one test file exactly as the ledger's own convention expects: relative to itself, so
-    it exercises the BANKED copy, not whatever happens to be installed on this machine."""
+# A cited test that LOADS ITS SUBJECT from the machine proves nothing about the copy in this repo.
+#
+# This must match the load, not the mention. The first draft matched any `.claude` path anywhere in
+# the file and reported 11 of 15 rows COUPLED -- including suites that merely point HOME at a temp
+# dir so `~/.claude/hook-events.jsonl` lands somewhere harmless, which is correct behaviour being
+# flagged as a defect. That detector would have been switched off inside a day, which is the exact
+# failure this ledger's own opening section is about. Verified ground truth on 2026-08-04 before and
+# after: exactly ONE banked suite loaded its subject from ~/.claude (`lying_command_guard_test.py`),
+# every other one already used `Path(__file__)`.
+_LOADERS = ("run_path", "spec_from_file_location", "SourceFileLoader", "load_source")
+
+
+def _loads_from_machine(src: str) -> bool:
+    for fn in _LOADERS:
+        for m in re.finditer(re.escape(fn) + r"\s*\(", src):
+            depth, i = 1, m.end()
+            while i < len(src) and depth:
+                depth += (src[i] == "(") - (src[i] == ")")
+                i += 1
+            if ".claude" in src[m.end():i]:
+                return True
+    return False
+
+PASS, STALE, UNRUNNABLE, COUPLED = "PASS", "STALE", "UNRUNNABLE", "COUPLED"
+
+
+def _run_test(path: Path) -> tuple[str, str]:
+    """Run one test file relative to itself, so it exercises the BANKED copy.
+
+    Returns (verdict, one-line detail). Verdicts are deliberately four-valued, not two: the whole
+    point of the 2026-08-04 rework is that "this repo's claim went stale", "this machine cannot run
+    the test", and "the test is not testing this repo's copy" are three different findings with
+    three different fixes, and collapsing them made the CI job permanently red for the one reason
+    that needed no action from a ledger author.
+    """
+    try:
+        src = path.read_text(encoding="utf-8", errors="replace")
+    except Exception as exc:
+        return STALE, f"could not read: {exc}"
+    if _loads_from_machine(src):
+        return COUPLED, ("loads its subject from ~/.claude, so a green run describes the INSTALLED "
+                         "copy and this repo's banked copy could be broken unnoticed. Load it "
+                         "relative to the test file instead (Path(__file__).parent).")
     try:
         proc = subprocess.run(
             [sys.executable, str(path)],
             capture_output=True, text=True, timeout=120, cwd=str(path.parent),
         )
     except Exception as exc:
-        return False, f"could not run: {exc}"
-    ok = proc.returncode == 0
+        return STALE, f"could not run: {exc}"
     tail = (proc.stdout or proc.stderr or "").strip().splitlines()
     summary = tail[-1] if tail else "(no output)"
-    return ok, summary
+    if proc.returncode == 0:
+        return PASS, summary
+    # Exit 2 is this repo's existing "NOT RUN, and NOT RUN is not a pass" convention
+    # (repo_doc_guard_test.py). It is an environment fact, not a ledger fact.
+    if proc.returncode == 2:
+        return UNRUNNABLE, summary
+    return STALE, summary
 
 
 def main() -> int:
@@ -111,9 +205,13 @@ def main() -> int:
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--list", action="store_true",
                      help="print every row's verdict and exit 0 regardless of findings")
+    ap.add_argument("--strict", action="store_true",
+                     help="also fail on UNRUNNABLE rows (tests this environment cannot run). "
+                          "Off by default so a CI runner that legitimately lacks a machine's "
+                          "checkouts does not sit permanently red for a non-ledger reason.")
     args = ap.parse_args()
 
-    rows = _rows()
+    rows, out_of_scope = _rows()
     if not rows:
         print(f"error: found the '## Ledger' section but zero rows matched in {LEDGER} — "
               f"the table format probably changed and this script's LEDGER_ROW pattern needs "
@@ -121,10 +219,17 @@ def main() -> int:
         return 2
 
     # Cache: one test run per unique test file, even if several rows cite the same one.
-    test_result_cache: dict[str, tuple[bool, str]] = {}
+    test_result_cache: dict[str, tuple[str, str]] = {}
     stale_rows: list[str] = []
+    coupled_rows: list[str] = []
+    unrunnable_rows: list[str] = []
     unverifiable_rows: list[str] = []
     verdicts: list[str] = []
+
+    # Worst wins: a row citing one stale test and one unrunnable test is STALE, not UNRUNNABLE.
+    _RANK = {PASS: 0, UNRUNNABLE: 1, COUPLED: 2, STALE: 3}
+    _LABEL = {PASS: "FRESH", UNRUNNABLE: "UNRUNNABLE", COUPLED: "COUPLED", STALE: "STALE"}
+    _BUCKET = {UNRUNNABLE: unrunnable_rows, COUPLED: coupled_rows, STALE: stale_rows}
 
     for row in rows:
         label = _guard_label(row)
@@ -135,47 +240,68 @@ def main() -> int:
                              f"-- cannot be auto-reverified)")
             continue
 
-        row_ok = True
+        worst = PASS
         row_detail = []
         for name in cited:
             if name not in test_result_cache:
                 path = HOOKS_DIR / name
                 if not path.exists():
-                    test_result_cache[name] = (False, f"MISSING: {path} does not exist")
+                    test_result_cache[name] = (STALE, f"MISSING: {path} does not exist")
                 else:
                     test_result_cache[name] = _run_test(path)
-            ok, detail = test_result_cache[name]
-            row_ok = row_ok and ok
+            verdict, detail = test_result_cache[name]
+            if _RANK[verdict] > _RANK[worst]:
+                worst = verdict
             row_detail.append(f"{name}: {detail}")
 
-        if row_ok:
+        if worst == PASS:
             verdicts.append(f"FRESH       {label}")
         else:
-            stale_rows.append(label)
-            verdicts.append(f"STALE       {label}\n              " + "\n              ".join(row_detail))
+            _BUCKET[worst].append(label)
+            verdicts.append(f"{_LABEL[worst]:11} {label}\n              "
+                            + "\n              ".join(row_detail))
+
+    fresh = len(rows) - len(stale_rows) - len(coupled_rows) - len(unrunnable_rows) \
+        - len(unverifiable_rows)
+    # One summary line, used by every exit path, so no path can report a partial picture. The
+    # out-of-scope count is on it because a denominator the reader cannot see is not a denominator.
+    summary = (f"{len(rows)} in-scope row(s): {fresh} fresh, {len(stale_rows)} stale, "
+               f"{len(coupled_rows)} machine-coupled, {len(unrunnable_rows)} unrunnable here, "
+               f"{len(unverifiable_rows)} no-test. "
+               f"{out_of_scope} further ledger row(s) are OUTSIDE this script's scope "
+               f"(the guard is not under mechanisms/hooks/) and were never checked.")
 
     if args.list:
         print("\n".join(verdicts))
         print()
-        print(f"{len(rows)} row(s): {len(rows) - len(stale_rows) - len(unverifiable_rows)} fresh, "
-              f"{len(stale_rows)} stale, {len(unverifiable_rows)} no-test")
+        print(summary)
         return 0
 
-    if stale_rows:
-        print(f"GUARD-LEDGER.md: {len(stale_rows)} row(s) cite a test that no longer passes "
-              f"(or no longer exists) -- the ledger's claim is stale:\n")
+    hard = stale_rows + coupled_rows + (unrunnable_rows if args.strict else [])
+    if hard:
+        print(f"GUARD-LEDGER.md: {len(hard)} row(s) failed:\n")
         for v in verdicts:
-            if v.startswith("STALE"):
+            if v.startswith(("STALE", "COUPLED")) or (args.strict and v.startswith("UNRUNNABLE")):
                 print(v)
-        print(f"\nFix: re-verify the guard, update its row (evidence + Date), or remove the row "
-              f"if the guard was retired. Run with --list to see every row's verdict, including "
-              f"the {len(unverifiable_rows)} row(s) with no cited test (not a failure -- those "
-              f"rely on live/manual evidence and this script cannot re-check them).")
+        print(f"\nFix, by verdict:")
+        print(f"  STALE      -- re-verify the guard, update its row (evidence + Date), or remove "
+              f"the row if the guard was retired.")
+        print(f"  COUPLED    -- the cited test loads its subject from ~/.claude. Retarget it to "
+              f"load next to itself; until then the row's evidence is about a file this repo does "
+              f"not own.")
+        if args.strict:
+            print(f"  UNRUNNABLE -- this environment cannot run the test (no checkout, no "
+                  f"harness). Not a ledger defect. Run without --strict to ignore.")
+        print()
+        print(summary)
         return 1
 
-    print(f"GUARD-LEDGER.md: all {len(rows) - len(unverifiable_rows)} test-backed row(s) still "
-          f"pass. {len(unverifiable_rows)} row(s) have no cited test and were not checked "
-          f"(run --list to see which).")
+    if unrunnable_rows:
+        # Never silent: an unmeasured row is stated, not folded into the pass.
+        print(f"GUARD-LEDGER.md: {len(unrunnable_rows)} row(s) could NOT be checked in this "
+              f"environment (exit 2 = 'not run', which is not a pass): "
+              + ", ".join(unrunnable_rows))
+    print(summary)
     return 0
 
 

@@ -162,11 +162,28 @@ def check(cmd: str):
     #     This is rule 4's failure mode one step earlier: that rule catches `cd X && git ...`
     #     specifically; this one catches the un-chained cd itself, for any command, so the
     #     agent has a chance to react to the failure instead of finding out from a later diff.
-    for m in re.finditer(r"\bcd\s+(?:--\s+)?(\S+)", cmd):
+    #
+    #     FALSE POSITIVE FOUND LIVE 2026-08-04 -- the first two commands of a run, both blocked:
+    #     `cd "C:/Users/.../repo" && sed -n ...`. This rule ran against `cmd`, where shell_only()
+    #     collapses a quoted span to a single SPACE. So `cd "C:/x" && ls` became `cd   && ls`,
+    #     `(\S+)` captured `&&` as the cd TARGET, the `&&` lookahead below then saw only ` ls`,
+    #     and the rule fired -- on the exact chained form it recommends, and ONLY when the path
+    #     was quoted, which on Windows is nearly always. That is the "cries wolf, gets overridden
+    #     by reflex, takes its true positives with it" failure this repo's own ledger opens with.
+    #     Fixed by running this rule against a PLACEHOLDER substitution (a quoted span becomes the
+    #     token ` Q `) rather than a blanking one -- the same idiom, and for the same reason, as
+    #     the `git commit` rule below: it hides quoted DATA while keeping the argv SHAPE intact.
+    #     Do not "simplify" this back to `cmd`; the negative cases in the test file are the proof.
+    #     The nested-payload half (`bash -c "cd /tmp; ls"`) is appended the same way `cmd` does it,
+    #     so this rule keeps the reach it had; a trailing separator with nothing after it still
+    #     reads as "cd is the last statement" via the blank-remainder test below.
+    cd_text = (QUOTED.sub(" Q ", HEREDOC.sub(" ", raw)) + " ; "
+               + QUOTED.sub(" Q ", nested_payloads(raw)))
+    for m in re.finditer(r"\bcd\s+(?:--\s+)?(\S+)", cd_text):
         target = m.group(1)
         if target in ("-", ".", ".."):
             continue  # returning to known-good ground, not entering unverified new ground
-        after = cmd[m.end():]
+        after = cd_text[m.end():]
         if re.match(r"\s*(&&|\|\|)", after):
             continue  # chained: a failed cd either skips what follows or hits a fallback
         remainder = re.split(r"[;\n]", after, maxsplit=1)
@@ -402,7 +419,7 @@ def check(cmd: str):
     # DESCRIBES this pattern in prose could false-positive here where other rules would not --
     # judged acceptable because the fix (`# guard:ok`) is one token and the match is narrow.
     for _fname, _tool, _how in _CONDUCTOR_JSONL_WRITERS:
-        if _tool in raw:
+        if _tool_is_invoked(raw, _tool):
             continue                       # the sanctioned writer FOR THIS FILE is doing the write
         if not (_jsonl_write_shape(cmd, _fname) or _jsonl_write_shape(raw, _fname)):
             continue
@@ -442,8 +459,21 @@ _CONDUCTOR_JSONL_WRITERS = (
 
 # A write VERB, required alongside `json.dumps` before that counts as a write. `print(json.dumps(
 # ...))` is a reader; `f.write(json.dumps(...))` and `p.write_text(... json.dumps(...))` are not.
+#
+# `Set-Content` and a bare `Out-File` were added 2026-08-04 after an adversarial review found that
+# `@{...} | ConvertTo-Json | Set-Content finds.jsonl` -- which REPLACES the whole file, strictly
+# worse than an unverified append -- passed with an empty problem list, while the two append forms
+# beside it were both caught. A rule that catches the mild shape and misses the destructive one is
+# the wrong way round.
 _JSONL_WRITE_VERB = re.compile(
-    r"\.write\s*\(|\bwrite_text\s*\(|>>|Add-Content|Out-File\s+-Append", re.I)
+    r"\.write\s*\(|\bwrite_text\s*\(|>>|Add-Content|Set-Content|Out-File", re.I)
+
+# The filename must sit on a path/word boundary. Same review, second finding: `fname in text` made
+# `finds.jsonl` match `scratch_finds.jsonl` and `test_finds.jsonl`, and the INSTALLED hook really
+# did block the reviewer's own throwaway-fixture command. A guard that fires on scratch files is
+# one that gets routed around, which costs its true positives -- the failure this ledger opens with.
+def _fname_re(fname: str) -> str:
+    return r"(?<![\w.-])" + re.escape(fname)
 
 
 def _jsonl_write_shape(text: str, fname: str) -> bool:
@@ -452,15 +482,51 @@ def _jsonl_write_shape(text: str, fname: str) -> bool:
     False for anything that merely reads the file -- that distinction is the whole reason this
     matches on a write shape rather than on the filename.
     """
-    if fname not in text:
+    esc = _fname_re(fname)
+    if not re.search(esc, text):
         return False
-    esc = re.escape(fname)
     return bool(
         re.search(esc + r"['\"]?\s*,\s*['\"]a", text)            # open(path, "a"...)
         or re.search(r">>\s*['\"]?[^|;]*" + esc, text)            # shell append redirect
-        or re.search(r"(?:Add-Content|Out-File\s+-Append)", text, re.I)   # PowerShell append
+        # PowerShell append OR whole-file replace. Kept deliberately loose about WHERE the verb
+        # sits relative to the filename, because the realistic form is a pipeline
+        # (`... | ConvertTo-Json | Set-Content <file>`) and demanding adjacency would miss it.
+        # Accepted cost: `Get-Content finds.jsonl | Set-Content elsewhere.txt` fires; the escape
+        # hatch is one token.
+        or re.search(r"(?:Add-Content|Set-Content|Out-File)", text, re.I)
         or (re.search(r"json\.dumps", text) and _JSONL_WRITE_VERB.search(text))
     )
+
+
+# Was the sanctioned writer actually INVOKED, or does its name merely appear somewhere in the text?
+#
+# Found by adversarial review 2026-08-04, confirmed false negative, highest severity of the pass:
+# the exemption was `if _tool in raw` -- a raw substring test over the whole command. Both of these
+# sailed through untouched, and both are genuine hand-rolled appends to a sanctioned file:
+#
+#     echo "see tools/note-find.py for the sanctioned way" && python -c "...open('finds.jsonl','a')..."
+#     # uses note-find.py conventions
+#     python -c "...open('finds.jsonl','a')..."
+#
+# i.e. a comment saying "I'm about to do this the way note-find.py does" silently disabled the guard
+# for that command. The whole point of a guard is that it works on an agent that is not trying to
+# evade it; an exemption keyed to a MENTION is defeated by an innocuous one.
+#
+# So: require the tool to appear in COMMAND position -- launched by an interpreter, with an optional
+# directory prefix -- and look for it in text with quoted spans and `#` comments removed, so a
+# mention inside a string or a comment cannot excuse anything. The cost is that an invocation buried
+# inside a quoted payload (`python -c "subprocess.run(['python','tools/note-find.py',...])"`) is no
+# longer exempt and needs `# guard:ok`. That is the right way to be wrong: it asks for one token,
+# rather than silently permitting the write this rule exists to catch.
+_TOOL_LAUNCHER = r"(?:python[\d.]*|py|pwsh|powershell|bash|sh|uv\s+run|poetry\s+run)"
+
+
+def _tool_is_invoked(text: str, tool: str) -> bool:
+    visible = QUOTED.sub(" ", HEREDOC.sub(" ", text))
+    visible = re.sub(r"(?m)#.*$", " ", visible)
+    return bool(re.search(
+        _TOOL_LAUNCHER + r"\b[^\n;&|]*?\s(?:[^\s;&|'\"]*[\\/])?" + re.escape(tool) + r"(?=\s|$)",
+        visible))
 
 
 # git's own global options, the ones that take a VALUE. Needed so `git -C <path> commit`

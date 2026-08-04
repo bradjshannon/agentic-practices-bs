@@ -61,3 +61,65 @@ The corollary, stated once because it applies to every doc in this list includin
 are reading: **a description of a mechanism is not the mechanism.** This file, `README.md`,
 `mechanisms/README.md`, and `GUARD-LEDGER.md` are all Voluntary. Only the things in the
 left-hand column of the table two sections up are not.
+
+## "Is this workstation up to par?" — a different question, and it needs a different instrument
+
+Asked 2026-08-04: *"I want that ledger to serve as a check for 'is this workstation up to par?'
+but maybe that standard will vary from user to user … so there has to be a way to opt-out of
+mechanisms. and if mechanisms can be auto-synced, we need settings for that too."*
+
+**The premise needs correcting before the design makes sense.** `tools/check_guard_ledger_freshness.py`
+is not, and cannot become, a workstation check. It reads `mechanisms/hooks/` **in this repo** and
+runs the banked test each ledger row cites. It never looks at a hooks directory, never looks at a
+harness config, and would give the same answer on a machine with nothing installed at all. It
+answers *"are the ledger's claims still true?"* — a repo question, which is why it runs in CI.
+
+That distinction is load-bearing for the opt-out, not pedantry. **Opting out of a guard does not
+make a failing banked test acceptable.** If a workstation declines `hardware_hedge_guard`, the row
+asserting that guard's evidence is still either true or false about this repo, and a false one must
+still fail. Wiring per-machine opt-out into the freshness checker would mean a machine could switch
+off the repo's own integrity check — the control-plane equivalent of letting the thing being
+measured set the threshold. So:
+
+| Question | Instrument | Scope | Opt-out? |
+|---|---|---|---|
+| Are the ledger's claims still true? | `tools/check_guard_ledger_freshness.py` | this repo, environment-independent | **No.** A claim is true or it is not. |
+| Can this environment even run the check? | same script, verdict `UNRUNNABLE` (exit 2) | per-run | n/a — reported, never folded into pass or fail |
+| Is this workstation carrying the mechanisms it means to? | **does not exist in this repo** | per machine | **Yes — this is where opt-out belongs.** |
+
+The third row is what Brad is asking for, and the third-row instrument is the one to build. Two
+partial ancestors exist in the private tactical repo — a generated installed-mechanisms report and
+a pre-run presence/wiring check — and between them they already prove the shape works. What neither
+has is a *declared intent* to compare the machine against: they report what IS installed, so a
+mechanism that was never installed and a mechanism that was deliberately declined are
+indistinguishable, which is the same "absence is not evidence" failure this repo keeps naming.
+
+### Opt-out and auto-sync are one table, not two features
+
+This is the part worth stating plainly, because treating them separately is the expensive mistake.
+A sync tool's first question is *"should this machine have this file?"* — which is exactly the
+opt-out answer. A machine that declined a mechanism must not have it pushed back by the next sync,
+and a machine that wants one has just told the sync tool to install it. One row per mechanism, and
+the three columns a sync tool and a conformance check both need:
+
+- **`want`** — `yes` / `no` / `pin:<rev>`. `no` is a *decision*, and a conformance check must report
+  a declined mechanism as DECLINED, never as MISSING. That is the whole point: a machine below par
+  and a machine deliberately configured differently must not render the same.
+- **`sync`** — `auto` / `manual` / `never`. Not a global setting: hooks are code that runs on every
+  tool call, and the standing rule that a sync direction is never guessed applies per file, not per
+  repo. `manual` is the correct default for anything hand-edited on both sides.
+- **`why`** — free prose, authored, never generated, preserved verbatim across regenerations. The
+  mechanical half is derived on every run; the judgement half is the half a regeneration must not
+  destroy.
+
+Two things follow that are not obvious. First, **the manifest cannot live in this repo**: it names
+a machine, and this repo's own sanitizer forbids that — so the catalogue is public and the manifest
+is per-machine (machine-side file, mirrored into the private tactical repo). Second, **hooks
+currently have no sync path at all** — the top table's first row says so — so `sync: auto` has
+nothing to execute until one exists. That ordering is a real dependency: the manifest is worth
+building first regardless, because it makes DECLINED expressible, which nothing today does.
+
+Still genuinely open, and Brad's call rather than a drafting detail: whether opt-out granularity is
+per-mechanism or per-*class* (declining "all Interrupt-class hooks" is a coherent preference and a
+much shorter file); and whether `sync: auto` is permitted at all for hooks, given the standing rule
+that a wrong guessed direction silently destroys whichever side was edited more recently.

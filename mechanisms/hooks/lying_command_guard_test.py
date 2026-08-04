@@ -1,6 +1,22 @@
-import runpy, os
+import os, runpy
+from pathlib import Path
 
-m = runpy.run_path(os.path.expanduser("~/.claude/hooks/lying_command_guard.py"))
+# Load the guard NEXT TO THIS FILE -- i.e. this repo's BANKED copy, not whatever happens to be
+# installed under ~/.claude on the machine that runs this.
+#
+# This line said `os.path.expanduser("~/.claude/hooks/...")` until 2026-08-04, and GUARD-LEDGER.md's
+# row for this suite had claimed since 2026-07-29 that it had already been retargeted. It had not.
+# Three ledger rows cited this file, so three rows' evidence described the INSTALLED hook while
+# asserting something about the banked one -- and the banked one could have been broken with the
+# suite still green. That is precisely the hole `WHERE-MECHANISMS-LIVE.md` names for hooks (nothing
+# keeps the two copies in step) arriving inside the ledger that was supposed to notice it.
+#
+# It also made the CI workflow shipped in ef902f5b permanently RED: on a runner with no ~/.claude,
+# this file raised FileNotFoundError, and `tools/check_guard_ledger_freshness.py` reported all three
+# rows STALE. Measured 2026-08-04 by running the checker with HOME pointed at an empty directory:
+# "18 row(s): 11 fresh, 4 stale, 3 no-test" -- three of the four stale were this file, and the
+# staleness had nothing to do with any ledger claim going stale.
+m = runpy.run_path(str(Path(__file__).resolve().parent / "lying_command_guard.py"))
 check = m["check"]
 
 # A case is (want, command) or (want, command, ignore) where `ignore` is a substring of a
@@ -94,6 +110,39 @@ cases = [
     # The heredoc vector: HEREDOC strips the body as prose for every other rule, so this one is
     # checked against the RAW text too. Without that, the realistic shape walks straight through.
     ("BLOCK", "python - <<'PY'\nimport json\nopen('finds.jsonl','a').write(json.dumps({}))\nPY"),
+    # ── Regressions from the 2026-08-04 adversarial review + one found live the same day ──────
+    # (a) The exemption must key on the tool being INVOKED, not on its name appearing. Both of
+    #     these were confirmed false negatives: a genuine hand-rolled append walked through
+    #     because the sanctioned tool's filename occurred in an echo or in a comment.
+    ("BLOCK", 'echo "see tools/note-find.py for the sanctioned way" && '
+              "python -c \"import json; open('finds.jsonl','a').write(json.dumps({}))\""),
+    ("BLOCK", "# uses note-find.py conventions\n"
+              "python -c \"import json; open('finds.jsonl','a').write(json.dumps({}))\""),
+    # ...while the real invocation, with and without a directory prefix, stays exempt.
+    ("ALLOW", "python tools/note-find.py \"another title\" \"another tldr\" --needs action"),
+    ("ALLOW", "py -3 note-find.py \"another title\" \"another tldr\""),
+    # (b) The filename must sit on a path/word boundary. `scratch_finds.jsonl` is not one of the
+    #     four sanctioned files, and the INSTALLED hook really did block this exact command
+    #     during the review -- a nuisance fire on a throwaway fixture is how a guard gets routed
+    #     around. Both directions asserted so the boundary cannot be widened back silently.
+    ("ALLOW", "python -c \"import json; open('scratch_finds.jsonl','a').write(json.dumps({}))\""),
+    ("ALLOW", "python -c \"import json; open('test_replies.jsonl','a').write(json.dumps({}))\""),
+    ("BLOCK", "python -c \"import json; open('conductors/iotta/finds.jsonl','a')"
+              ".write(json.dumps({}))\""),
+    # (c) A whole-file REPLACE is strictly worse than an unverified append and was undetected.
+    ("BLOCK", "@{title='x'} | ConvertTo-Json -Compress | Set-Content finds.jsonl"),
+    ("BLOCK", "@{title='x'} | ConvertTo-Json -Compress | Out-File pins.jsonl"),
+    # (d) Rule 4b fired on a QUOTED path even when properly `&&`-chained -- it recommended the
+    #     form it was blocking. Found live 2026-08-04 on the first two commands of a run.
+    ("ALLOW", 'cd "C:/Users/x/Documents/GitHub/conductor-bs" && sed -n "1,5p" foo.md'),
+    ("ALLOW", 'cd "C:/x y/z" && ls'),
+    ("ALLOW", "cd \"C:/x y/z\" || { echo failed; exit 1; }"),
+    # ...and the real hazard with a quoted path is still caught, so (d) is not a hole punched
+    # through the rule. This is the 2026-08-03 shape with the path quoted.
+    ("BLOCK", 'cd "C:/x y/conductor-pub"\ngit init -b main'),
+    ("BLOCK", 'cd "C:/x y/z"; cat README.md'),
+    # ...including inside a nested payload, which the placeholder rewrite must not drop.
+    ("BLOCK", 'bash -c "cd /tmp; cat README.md"'),
 ]
 
 fails = 0
