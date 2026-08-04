@@ -119,10 +119,9 @@ currently have no sync path at all** — the top table's first row says so — s
 nothing to execute until one exists. That ordering is a real dependency: the manifest is worth
 building first regardless, because it makes DECLINED expressible, which nothing today does.
 
-Still genuinely open, and Brad's call rather than a drafting detail: whether opt-out granularity is
-per-mechanism or per-*class* (declining "all Interrupt-class hooks" is a coherent preference and a
-much shorter file); and whether `sync: auto` is permitted at all for hooks, given the standing rule
-that a wrong guessed direction silently destroys whichever side was edited more recently.
+**Settled 2026-08-04 by Brad: granularity is PER MECHANISM.** Per-class stays available as a later
+convenience; it is not the only knob, because a class-level decline silently absorbs any mechanism
+added to that class afterwards.
 
 ### The question is not academic — it was answered empirically, badly, the day it was asked
 
@@ -147,3 +146,91 @@ because nothing writes down what was intended.** That is the manifest's whole jo
 the recommendation above is to build the declared-intent column rather than a new subsystem — two
 of these three would have been caught by a manifest plus a diff, with no new checking machinery at
 all. The third (git hooks) needs one new probe, which is `.git/hooks/` per declared repo.
+
+*(A fourth turned up while answering Brad's follow-up: the fix for the second finding above still
+reported one repo "not cloned" when it was cloned — under `$HOME` rather than a `GitHub/` root,
+because it is a dotfiles repo and that is where dotfiles repos go. I asserted that WARN was a true
+positive, in a commit message, and used it as the positive control for the other two. Replacing a
+hardcoded path with a slightly-less-hardcoded list of paths reproduces the same defect at lower
+amplitude, and a control you have not checked is not a control.)*
+
+### Correction: hooks live in THREE places, not two, and the third one already works
+
+The top table's first row says hooks are kept in sync by *"Nothing, currently."* That is right about
+the pair it names and **wrong about the population.** There is a third copy, and it is the healthiest
+of the three: a per-host automated backup repo that mirrors an allow-list of `~/.claude` into
+`<HOSTNAME>/.claude/`, committing and pushing on a ~20-minute timer. `hooks/` is on its allow-list.
+
+Measured across all 21 installed-or-banked hooks on one workstation:
+
+| | count | meaning |
+|---|---|---|
+| machine ≡ backup | **21 of 21, byte-identical** | the backup is current and one-way; it is never stale |
+| machine ≡ banked catalogue | 11 | in step |
+| machine ≠ banked catalogue | **6** | drifted silently, four of them with ledger rows |
+| backed up but never banked | 4 | on the machine and in the backup, absent from the catalogue |
+| banked but NOT installed | 1 | has a ledger row and a green test; is not running here |
+
+Three copies, three jobs, one keeper between them:
+
+- **machine** — live, and the authority for everything hand-edited here.
+- **per-host backup repo** — *derived*, one-way, current, per-host. Excellent for restore. Useless as
+  an authority: its sync does `rm -rf <dest>; cp -r <src>` per item, so anything authored on the repo
+  side is destroyed on the next cycle. Its allow-list is deny-by-default and its own comments record
+  that omissions from it are **silent by construction** and have already bitten twice.
+- **banked catalogue (this repo)** — shareable, reviewable, hand-edited on both sides. Nothing keeps
+  it in step with the machine; the 6 drifted hooks are what that costs.
+
+**That last table row is the whole question in one line.** A hook that is banked, tested green, and
+not installed is either a deliberate decline or an accidental omission, and **no instrument can tell
+which**: the freshness checker says FRESH (correct — the repo's claim holds) and the installed report
+says not-wired (correct — it is not running). Both are right, neither is the answer, and the missing
+thing is a written-down intent.
+
+### Is the per-host backup repo the right home for the manifest?
+
+**Yes for the namespace, no for the file location — and that distinction is the answer.** It already
+has the per-machine partition, one directory per hostname with both workstations present, which is
+exactly what a manifest needs and which no other repo has. But the manifest cannot be authored *into*
+that repo: the next sync cycle deletes and rewrites the directory from the machine.
+
+The routing that works, and needs no new machinery at all: **author the manifest under `~/.claude/`
+and add its filename to the sync allow-list.** It is then backed up per-host automatically, in the
+right namespace, versioned and pushed, in the correct one-way direction — and the machine stays the
+authority, which it must be for a file describing that machine.
+
+**Do not move the hand-edited-on-both-sides files there.** Agent definitions and briefs are edited on
+the machine *and* in the repo, which is exactly why their sync tool refuses to guess a direction. A
+one-way destructive mirror would resolve that ambiguity by destroying one side every 20 minutes. The
+rule that falls out: **anything authored on the machine and only ever read elsewhere belongs in the
+per-host backup; anything authored in two places must not go near it.** The manifest is the former.
+So is the answer to "is it a better place for machine-specific conductor files" — for the derived and
+machine-authored ones, yes; for the mirrored ones, no, and the distinction is not about the files
+being machine-specific, it is about how many places author them.
+
+### Auto-sync scope: updates may auto-apply, add/remove/destructive must not
+
+Brad, 2026-08-04: *"we have an option for auto-UPDATES but never an option for auto-ADD/REM actions.
+Add/rem, as well as potentially destructive updates, need to be raised for the user's approval."*
+
+Right, and it turns `sync` from a per-file switch into a per-file switch **plus a per-operation floor
+no switch can lower**:
+
+| operation | may `sync: auto` apply it? |
+|---|---|
+| update; exists both sides; one side strictly newer, the other unchanged since the last common state | yes |
+| update where **both** sides changed since the last common state | **no — gated** |
+| add (present one side, absent the other) | **no — gated** |
+| remove | **no — gated**, always, whatever the setting says |
+
+The floor matters more than the setting. An *add* is precisely the case where nothing can know
+whether the file is new-and-wanted or declined-and-absent — which is the question the manifest
+exists to answer — so until a manifest row says `want: yes`, an add is a question, not an update.
+
+**The surface for raising it already exists; do not build a fourth one.** The nagging agent described
+above is the status-page card: it carries the exact command, re-evaluates its own premise on every
+render, will not go away while the premise holds, and retires itself the moment the situation is
+fixed. That pattern was used for one of the findings above on the same day it was found. What is
+missing is not a TUI — it is that the existing drift check classifies drift only as "which side is
+newer" and prints it to a console nobody reads unattended. It should classify each drift as
+update/add/remove and **file a card for every gated one.**
