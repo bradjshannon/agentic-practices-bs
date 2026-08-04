@@ -85,9 +85,11 @@ measured set the threshold. So:
 |---|---|---|---|
 | Are the ledger's claims still true? | `tools/check_guard_ledger_freshness.py` | this repo, environment-independent | **No.** A claim is true or it is not. |
 | Can this environment even run the check? | same script, verdict `UNRUNNABLE` (exit 2) | per-run | n/a — reported, never folded into pass or fail |
-| Is this workstation carrying the mechanisms it means to? | **does not exist in this repo** | per machine | **Yes — this is where opt-out belongs.** |
+| Is this workstation carrying the mechanisms it means to? | `tools/check_workstation.py`, against a per-machine `~/.claude/mechanisms.toml` (built 2026-08-04) | per machine | **Yes — this is where opt-out belongs.** |
 
-The third row is what Brad is asking for, and the third-row instrument is the one to build. Two
+The third row is what Brad is asking for, and the third-row instrument is the one to build. **It
+now exists: `tools/check_workstation.py`** (2026-08-04), reading the per-machine manifest described
+below. It is deliberately *not* in CI — its subject is a machine, not this repo. Two
 partial ancestors exist in the private tactical repo — a generated installed-mechanisms report and
 a pre-run presence/wiring check — and between them they already prove the shape works. What neither
 has is a *declared intent* to compare the machine against: they report what IS installed, so a
@@ -186,6 +188,14 @@ not installed is either a deliberate decline or an accidental omission, and **no
 which**: the freshness checker says FRESH (correct — the repo's claim holds) and the installed report
 says not-wired (correct — it is not running). Both are right, neither is the answer, and the missing
 thing is a written-down intent.
+
+**Answered 2026-08-04 by `tools/check_workstation.py`.** With a manifest row saying `want = "no"`
+that hook reports **DECLINED** and the run exits 0; flip the single word to `"yes"` and the same
+hook reports **MISSING** and the run exits 1. Nothing else changes. That one flip is the whole
+feature, and it is what neither of the two pre-existing instruments could express.
+*(Re-measured while building it: the drift count in the table above is now **5**, not 6 —
+`lying_command_guard.py` was banked later the same evening, which reconciled it. The other four
+counts reproduce exactly.)*
 
 ### Is the per-host backup repo the right home for the manifest?
 
