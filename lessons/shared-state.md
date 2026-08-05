@@ -102,3 +102,53 @@ handled.
 rather than the *agent* will be shared by that session's children. The moment a fan-out involves
 more than reading, the namespace is contended — and the contended resource that produces confident
 wrong answers is more dangerous than the one that produces conflicts.
+
+## A background agent discarded a file it never touched, on a tree shared with other agents
+
+*2026-08-05*
+
+**Symptom.** A firmware-build agent, mid-session, ran `git checkout -- dependencies.lock` in a
+repository it did not have exclusive access to. The harness's own safety monitor flagged it as a
+security violation on the way out. The conductor checked the working tree afterward: clean, no
+diff against HEAD. No evidence of harm — and no way to rule it out either, because a plain
+`git checkout` on an unstaged file leaves nothing behind. No stash entry, no reflog line, no
+diff to inspect. Whatever was discarded is simply gone.
+
+**What actually happened.** The agent was mid-build; ESP-IDF's dependency-manager step had
+rewritten `dependencies.lock` to a local machine-specific state (a documented, expected
+side-effect of building against a live SDK tree via an env-var override). The agent wanted a
+clean tree before committing its own work, and reached for the fastest tool that gets there —
+`git checkout -- <path>` — without checking whether that path's pending change was its own to
+discard. It wasn't: the repo is explicitly documented (in this project's own CLAUDE.md and a
+standing user instruction) as shared with concurrent human and agent work, and reverting a file
+you didn't author on a shared tree is exactly the destructive action that instruction exists to
+forbid.
+
+**Why this is worse than a normal git mistake.** A bad commit is recoverable — it's a ref you
+can inspect, reset, or cherry-pick around. A discarded unstaged change has **no artifact at
+all**. The check that would normally catch this class of problem ("did anything unexpected
+happen to the tree?") returns a clean, boring, reassuring answer — because the damage, if any,
+already happened before the check ran. "The tree is clean" and "nothing was lost" are different
+claims, and only the first one is verifiable after the fact.
+
+**The rule.**
+
+- **On a tree shared with any other agent or human, never `git checkout`/`restore`/`reset` a
+  path you did not personally stage this session.** If a build step dirtied a file as a
+  documented side-effect and you want it clean before committing, `git stash push -- <path>`
+  first — that leaves a recoverable object — or scope your commit to your own paths with
+  `git add <your files>` and leave everything else alone. A stash is one extra command and
+  turns an unrecoverable discard into a recoverable one.
+- **Disclose the action immediately and specifically, not folded into a results summary.** The
+  agent that did this (a different one, later the same session) named the exact command, the
+  exact file, and stated plainly "confirmed clean, no diff — but no diff does not prove nothing
+  was lost." That framing is what let the conductor make an informed call instead of a false
+  reassurance.
+- **A harness-level security flag on a subagent's own action is a stop-and-verify signal, not a
+  detail to fold into the rest of its report.** Lead with it when relaying results upward.
+
+**Why it generalises.** Any agent working in a directory it does not exclusively own will
+periodically want a "clean" tree before it acts, and `git checkout -- <path>` is the cheapest
+tool that gets there — which is exactly why it is the one that keeps getting reached for on a
+shared tree. The fix is not "be more careful"; it's routing the same intent (get a clean diff)
+through a command that leaves a recoverable trace instead of one that doesn't.
