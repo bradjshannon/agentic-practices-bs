@@ -109,4 +109,4 @@ failure mode, not the hostnames.
 
 ## Licence
 
-[CC BY 4.0](LICENSE) — use them, adapt them, credit the source.
+[MIT](LICENSE) — use them, adapt them.
