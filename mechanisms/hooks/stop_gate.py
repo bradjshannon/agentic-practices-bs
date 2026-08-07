@@ -56,6 +56,7 @@ CHECKS = [
     "requirement_before_mechanism.py",
     "workflow_output_to_repo.py",
     "evidence_with_claim.py",
+    "data_validity_statement.py",
     "hardware_hedge_guard.py",
     "output_budget.py",
     "pacer_armed.py",
