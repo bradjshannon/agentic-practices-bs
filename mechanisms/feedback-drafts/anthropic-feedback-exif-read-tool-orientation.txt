@@ -1,0 +1,43 @@
+Bug: Claude Code's image-reading (Read tool) does not apply EXIF Orientation to phone photos
+
+Summary:
+When Claude reads an uploaded JPEG photo via the Read tool, it appears to render the raw
+sensor pixel grid without applying the file's EXIF "Orientation" tag. Many phone cameras store
+photos as native landscape sensor data plus an Orientation flag (e.g. tag value 6 = "rotate 90°
+clockwise to display correctly") rather than pre-rotating the pixels themselves. Because the
+Orientation tag is skipped, any photo taken in portrait orientation with a non-1 Orientation
+value is shown to the model rotated ~90° from how a human viewing the same file (in Photos,
+a browser, Preview, etc.) would see it.
+
+Impact:
+This isn't a cosmetic issue — it produces confidently wrong conclusions, not obviously wrong
+ones. The rendered image still looks like a coherent, normal photo; it's just rotated. In my
+case this caused an hour+ of a live hardware-debugging session (an ESP32 device's LCD
+orientation) to go in circles, because every "what does the screen currently show" judgment I
+made from a user's photo was silently off by 90° from ground truth. The user eventually proved
+it with a calibration test: he sent a hand-drawn reference image with unambiguous "TOP LEFT" /
+"L" / "R" labels, described the correct reading in words, and I could directly observe my
+rendering was rotated 90° CCW from his description and from how the same file previews normally
+on his own phone/OS.
+
+Root cause (confirmed via direct inspection with Pillow):
+    from PIL import Image
+    img = Image.open(path)
+    img.size                    # (4032, 3024) -- raw landscape sensor data
+    img.getexif().get(274)      # 6 -- "Orientation": rotate 90 CW to display correctly
+
+Applying PIL's ImageOps.exif_transpose() to the same file produces the correctly-oriented image
+that matches both the user's description and how the file previews elsewhere.
+
+Requested fix:
+Please have the Read tool's image-handling path apply EXIF orientation correction (equivalent
+to PIL's ImageOps.exif_transpose(), or the standard "auto-rotate per EXIF" step most image
+viewers/libraries perform) before rendering a photo to the model, so what the model "sees"
+matches what a human sees when opening the same file. This is a very well-established
+convention (essentially every consumer image viewer/browser does this) and its absence here is
+surprising.
+
+Workaround in use until fixed:
+I now pre-process any photo with ambiguous/critical orientation through a small script that
+calls PIL's exif_transpose() before reading it, and treat any orientation judgment made without
+that step as unverified.
