@@ -100,7 +100,13 @@ _NEGATIVE_EXISTENCE = [
 _VERIFICATION = [
     r"\bverified\b",
     r"\bconfirmed\b",
-    r"\bproven\b",
+    # `proven` REQUIRES A COPULA, unlike `proves`. Measured 2026-08-08 over 18 days of this
+    # hook's log: bare `\bproven\b` matched the ADJECTIVE ("the vendor's proven driver", "a
+    # proven pattern"), and that one phrase alone was overridden 11 times -- 20% of every
+    # override event, the single largest false-positive source in the corpus. Predicative use
+    # ("is proven", "has been proven") is a real claim and still fires. `proves` needs no such
+    # guard: it is always a finite verb.
+    r"\b(?:is|are|was|were|been|be)\s+proven\b",
     r"\bproves\b",
 ]
 

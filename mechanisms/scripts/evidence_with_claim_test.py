@@ -201,6 +201,18 @@ for _s in _NOT_HEDGED:
     check(f"_HEDGE does NOT excuse real claim: {_s!r}", bool(_HEDGE.search(_s)), False)
 
 
+# --- `proven` needs a copula, added 2026-08-08 -----------------------------------------------
+# Bare \bproven\b matched the ADJECTIVE. "the vendor's proven driver" alone was overridden 11
+# times -- 20% of every override event in the 18-day corpus, the largest single false-positive
+# source. Predicative use is a real claim and must keep firing; do not collapse these lists.
+for _s in ["the vendor's proven driver", "a proven pattern",
+           "compared against the proven implementation"]:
+    check(f"adjectival 'proven' does NOT fire: {_s!r}", find_claims(_s), [])
+for _s in ["this is proven", "it has been proven on hardware", "the fix was proven live",
+           "this proves the fix works"]:
+    check(f"predicative proof DOES fire: {_s!r}", bool(find_claims(_s)), True)
+
+
 if FAILURES:
     print(f"FAIL ({len(FAILURES)}):")
     for f in FAILURES:
