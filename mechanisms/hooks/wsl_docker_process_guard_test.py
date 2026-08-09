@@ -54,6 +54,47 @@ cases = [
     # A number that merely CONTAINS 8000/8001 as a substring must not count as the port.
     ("ALLOW", "tasklist | findstr 18000"),
     ("ALLOW", "Get-Process -Id 80001"),
+
+    # ── The three FALSE POSITIVES this guard produced on 2026-08-09, all in one session ──────
+    # Each blocked a command that had nothing to do with the iotta server. Kept as cases so the
+    # narrowing cannot be silently widened back; see the comment block in the guard for why the
+    # verb is matched outside quotes while the context is matched raw.
+    #
+    # (1) Reading THIS GUARD'S OWN SOURCE. The verbs and ports are inside a grep PATTERN.
+    ("ALLOW", 'grep -n "netstat\\|8000\\|8001\\|PORT\\|def check" wsl_docker_process_guard.py'),
+    ("ALLOW", 'rg "tasklist|Get-Process" --glob "*.py"  # which guards mention 8000?'),
+    # (2)+(3) The context came from a SCRATCHPAD PATH on a DIFFERENT LINE. Every scratch path in
+    #         this project contains the project name, so this is permanent, not incidental.
+    ("ALLOW",
+     'SCRATCH="/c/Users/x/Temp/claude/C--Users-x-Documents-GitHub-iotta-bs/abc/scratchpad"\n'
+     'netstat -ano | grep LISTENING | grep -E ":8917"'),
+    ("ALLOW",
+     'SCRATCH="/tmp/claude/C--Users-x-GitHub-iotta-bs/s"\n'
+     'PID=$(netstat -ano | grep 8917 | awk \'{print $NF}\')\n'
+     'taskkill //PID "$PID" //F'),
+    # THE CONTROL for (2)/(3): same shape, but the context is in the SAME segment as the verb.
+    # Without this pair the narrowing above could degrade into "multi-line commands are exempt".
+    ("BLOCK",
+     'SCRATCH="/tmp/whatever"\n'
+     'netstat -ano | grep LISTENING | grep -E ":8000"'),
+    # And a genuine iotta process hunt on one line still fires, quotes or not.
+    ("BLOCK", 'tasklist | findstr /i "iotta"'),
+
+    # (4) THE FOURTH false positive, found minutes after fixing the first three: this guard
+    #     blocked the `git commit` carrying its own fix, because the message quoted the very
+    #     true positive it was explaining. Backticked prose is not covered by _QUOTED, and a
+    #     heredoc body is data, never shell. Same root cause as (1): text ABOUT the guard read
+    #     as an instance of it.
+    ("ALLOW",
+     "python commit_verify.py --repo /r --path guard.py <<'MSG'\n"
+     "fix(guard): narrow the guard that cried wolf\n"
+     "Splitting on `|` would separate `netstat -ano` from `findstr :8000` and kill\n"
+     "the canonical true positive on iotta's port 8000.\n"
+     "MSG"),
+    # CONTROL: a real hunt AFTER a heredoc ends must still fire -- stripping the body must not
+    # become "anything in a command containing a heredoc is exempt".
+    ("BLOCK",
+     "cat <<'EOF' > notes.txt\njust some prose\nEOF\nnetstat -ano | findstr :8000"),
 ]
 
 

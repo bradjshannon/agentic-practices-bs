@@ -63,6 +63,57 @@ def _has_context(text: str) -> bool:
     return bool(_PORT_RE.search(text) or _IOTTA_RE.search(text))
 
 
+# ── THE TWO NARROWINGS ADDED 2026-08-09, after this guard blocked three unrelated commands ──
+#
+# It fired on a session doing conductor work that had nothing to do with the iotta server:
+#
+#   1. `grep -n "netstat\|8000\|8001..." wsl_docker_process_guard.py`  -- reading THIS FILE's own
+#      source. The verbs and the ports were inside a grep PATTERN, i.e. data. This is the prose
+#      trap lying_command_guard.py's rule 5 documents ("a guard that punishes writing about its
+#      own patterns is one that gets disabled"), arriving here.
+#   2. A multi-line block whose FIRST line set `SCRATCH=".../C--Users-brad-Documents-GitHub-
+#      iotta-bs/.../newuser"` and whose LATER line ran `netstat ... | grep :8917`. The context
+#      signal came from a session scratchpad PATH on a different line -- `\biotta\b` matches
+#      `iotta-bs` because `-` is a word boundary. In THIS project every scratch path contains
+#      the project name, so that is a permanent false-positive source, not a one-off.
+#   3. The same block's `taskkill` on port 8917, blocked for the same reason.
+#
+# Both narrowings are needed; each alone leaves one of the three firing.
+#
+# (a) SEGMENT the command on `;`, newline, `&&`, `||` -- but deliberately NOT on `|`. A pipeline
+#     is one logical command, and `netstat -ano | findstr :8000` is this guard's canonical true
+#     positive: splitting on `|` would put the verb and the port in different segments and the
+#     guard would go silent on the exact incident it was built from. Context must now co-occur
+#     with the verb in the SAME segment, which is what kills #2 and #3.
+#
+# (b) Look for the VERB in quote-stripped text, but for the CONTEXT in the raw segment. The
+#     asymmetry is the point and is load-bearing in both directions:
+#       * verb stripped  -> `grep -n "netstat..."` has no verb outside quotes, so #1 goes quiet.
+#       * context raw    -> `findstr ":8000"` and `"CommandLine like '%iotta%'"` keep their
+#                           signal, which lives INSIDE quotes in several real true positives.
+#     A blanket shell_only() over both would have silently killed those.
+# (c) STRIP HEREDOC BODIES FIRST. Found immediately after (a) and (b) shipped, by this guard
+#     blocking the very `git commit` that carried its own fix: the message quoted
+#     `netstat -ano | findstr :8000` while explaining why that case must keep working. A
+#     heredoc body is prose being passed to a program, never commands the shell will run, and
+#     backticked prose is not covered by _QUOTED (which only knows ' and "). Stripped before
+#     segmenting, because a body spans the newlines the segmenter splits on. This is the fourth
+#     instance of one root cause -- text ABOUT the guard read as an instance of the guard --
+#     which is why lying_command_guard.py's shell_only() has done this from the start.
+_HEREDOC = re.compile(r"<<-?\s*'?(\w+)'?.*?^\1\s*$", re.S | re.M)
+_QUOTED = re.compile(r"'[^']*'|\"[^\"]*\"", re.S)
+_SEGMENT_SPLIT = re.compile(r";|\n|&&|\|\|")
+
+
+def _segments(cmd: str):
+    """Shell segments, splitting on `;`/newline/`&&`/`||` but never on a single `|`.
+
+    Heredoc bodies are removed first: they are data handed to a program (a commit message, a
+    file being written), not shell the guard should reason about.
+    """
+    return _SEGMENT_SPLIT.split(_HEREDOC.sub(" ", cmd))
+
+
 # Windows process/PID-hunt shapes. Each is common enough on its own to be legitimate -- the
 # `_has_context` gate above is what keeps this narrow.
 _HUNT_PATTERNS = [
@@ -77,13 +128,20 @@ _HUNT_PATTERNS = [
 
 def check(cmd: str):
     """Return a list of (problem, fix) for a command string. Empty list = allow."""
-    if not cmd or not _has_context(cmd):
+    if not cmd:
         return []
 
+    # Verb outside quotes, context anywhere in the SAME segment. See the narrowings above.
     hit = None
-    for name, pattern in _HUNT_PATTERNS:
-        if pattern.search(cmd):
-            hit = name
+    for segment in _segments(cmd):
+        if not _has_context(segment):
+            continue
+        unquoted = _QUOTED.sub(" ", segment)
+        for name, pattern in _HUNT_PATTERNS:
+            if pattern.search(unquoted):
+                hit = name
+                break
+        if hit is not None:
             break
     if hit is None:
         return []
