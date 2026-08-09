@@ -8,6 +8,11 @@ For *where* each kind of thing here actually lives — the machine copy vs. the 
 what (if anything) keeps them in sync — see
 [`WHERE-MECHANISMS-LIVE.md`](WHERE-MECHANISMS-LIVE.md).
 
+For *how many projects* a mechanism fires in — everything catalogued here is system-wide, and
+repo-scoped guards were a class this corpus had no record of — plus how a machine declares which
+mechanisms it wants and how a vendored copy is kept from diverging, see
+[`SCOPE-AND-VENDORING.md`](SCOPE-AND-VENDORING.md).
+
 Brad, 2026-07-22: *"I want every conductor to be able to write notes, process improvements,
 mechanisms, hooks, skills, scripts, etc. into that repo, so every other conductor can benefit
 on the next run."*

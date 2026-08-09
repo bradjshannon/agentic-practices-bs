@@ -5,6 +5,11 @@ This file records which guards have had each direction actually demonstrated, an
 
 Copy this file into any repo that owns guards; keep one ledger per repo, next to the guards.
 
+For *which* guards are worth copying into another repo at all — and how a machine declares what it
+wants, so a vendored copy cannot silently diverge from its source — see
+[`SCOPE-AND-VENDORING.md`](SCOPE-AND-VENDORING.md). Until that was written, the line above was the
+corpus's only acknowledgement that repo-scoped guards exist.
+
 ---
 
 ## Why one direction is not enough
