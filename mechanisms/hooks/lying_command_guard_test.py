@@ -38,7 +38,12 @@ cases = [
     # Benign -- these MUST NOT fire. A guard that cries wolf gets disabled.
     ("ALLOW", ".\\idf.ps1 build"),
     ("ALLOW", ".\\idf.ps1 -p COM7 app-flash"),
-    ("ALLOW", "idf.py build"),  # legitimate inside an already-exported IDF shell
+    # Legitimate inside an already-exported IDF shell -- w.r.t. RULE 5, which is what this case
+    # is about. It is not silent overall any more: the offload rule (N+2, added 2026-08-08)
+    # legitimately fires on it, because a foreground `idf.py build` blocks the tool call for
+    # minutes. Naming that rule keeps the original assertion -- "rule 5 must not fire on a bare
+    # idf.py" -- intact and exact, instead of flipping the case to BLOCK and throwing it away.
+    ("ALLOW", "idf.py build", "in the FOREGROUND"),
     ("ALLOW", "grep -n idf.ps1 CLAUDE.md"),
     ("ALLOW", "cat idf.ps1"),
     # Nested-payload change: a real command inside -c/-Command must be seen...
@@ -143,13 +148,59 @@ cases = [
     ("BLOCK", 'cd "C:/x y/z"; cat README.md'),
     # ...including inside a nested payload, which the placeholder rewrite must not drop.
     ("BLOCK", 'bash -c "cd /tmp; cat README.md"'),
+    # ── Rule N+2: a measured-slow command in the FOREGROUND (2026-08-08) ──────────────────────
+    # Narrowed by a 13,527-command corpus; see
+    # conductor-bs/conductors/iotta/proposals/2026-08-08-offload-guard-measurement.md.
+    # (i) TRUE POSITIVES -- one per guarded shape.
+    ("BLOCK", "python -m pytest tools/ -q"),
+    ("BLOCK", "PYTHONPATH=src python -m pytest tests/ -q 2>&1 | tail -2"),
+    ("BLOCK", "pytest"),
+    ("BLOCK", "py -3 -m pytest tests/"),
+    ("BLOCK", "cd server && python -m pytest tests/ -q"),
+    ("BLOCK", "npm run build"),
+    ("BLOCK", "npm test"),
+    ("BLOCK", "vitest run"),
+    ("BLOCK", "idf.py -p COM7 flash"),
+    ("BLOCK", "idf.py monitor"),
+    # (ii) THE MANDATORY FALSE-POSITIVE CORPUS. Every one of these was MEASURED as a common,
+    #      correct command; the four `DROP`ped candidates in the proposal died on exactly these.
+    ("ALLOW", "grep -v x file"),          # invert-match SHRINKS output; `-v` was dropped for this
+    ("ALLOW", "git remote -v"),
+    ("ALLOW", "docker -v"),
+    ("ALLOW", "git log --oneline -1"),    # `git log` dropped: 183 of 215 already bounded
+    ("ALLOW", "python tools/ack-inbox.py --all"),  # `--all` dropped: internal tool, tiny inbox
+    # A TARGETED pytest is fast and must never fire -- 203 of 333 real invocations are these.
+    ("ALLOW", "python -m pytest tests/test_devices.py -q"),
+    ("ALLOW", "pytest -k \"rejects_version\" -q"),
+    ("ALLOW", "python -m pytest tools/test_status_page.py::SomeTest::test_x"),
+    # The word `pytest` as an ARGUMENT rather than the verb -- the reason the invocation regex
+    # anchors on segment-start or `-m` instead of matching the bare word anywhere.
+    ("ALLOW", "grep -rn pytest docs/"),
+    # THE PROSE TRAP, §3: 28 of 30 corpus `idf.py` matches are text, not commands -- including
+    # this file's own fixtures. A heredoc body must be invisible to this rule.
+    ("ALLOW", "python - <<'PY'\nprint('the runbook says to run idf.py build first')\nPY"),
+    # Near-miss controls: the neighbouring subcommands of each guarded shape are NOT slow.
+    ("ALLOW", "npm install"),
+    ("ALLOW", "npm run dev"),
+    ("ALLOW", "idf.py menuconfig"),
+    ("ALLOW", "idf.py --version"),
+    # (iii) THE GATE THAT MAKES THE RULE HONEST. Identical commands to the true positives above,
+    #       differing ONLY in the Bash tool's `run_in_background` PARAMETER. Without this the
+    #       rule would fire just as loudly on an agent that had already done the right thing --
+    #       a 100% false-positive rate on correct behaviour, strictly worse than no guard.
+    ("ALLOW", "python -m pytest tools/ -q", None, True),
+    ("ALLOW", "npm run build", None, True),
+    ("ALLOW", "idf.py build", None, True),
 ]
 
 fails = 0
 for case in cases:
     want, c = case[0], case[1]
     ignore = case[2] if len(case) > 2 else None
-    problems = check(c)
+    # 4th element: the Bash tool's `run_in_background` PARAMETER, which is NOT part of the
+    # command string and so cannot be expressed in `c`. Only the offload rule reads it.
+    bg = case[3] if len(case) > 3 else False
+    problems = check(c, run_in_background=bg)
     if ignore:
         problems = [p for p in problems if ignore not in p[0]]
     got = "BLOCK" if problems else "ALLOW"
@@ -157,7 +208,8 @@ for case in cases:
     fails += 0 if ok else 1
     shown = c.replace("\n", "\\n")
     print(f"{'ok  ' if ok else 'FAIL'} want={want:5} got={got:5}  {shown}"
-          + (f"   [ignoring: {ignore}]" if ignore else ""))
+          + (f"   [ignoring: {ignore}]" if ignore else "")
+          + ("   [run_in_background=True]" if bg else ""))
 
 print()
 print(f"{len(cases) - fails}/{len(cases)} passed, {fails} failed")

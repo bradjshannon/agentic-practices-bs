@@ -63,8 +63,15 @@ def nested_payloads(cmd: str) -> str:
     return " ; ".join(m.group(1)[1:-1] for m in NESTED.finditer(cmd))
 
 
-def check(cmd: str):
-    """Return a list of (problem, fix) for a command string."""
+def check(cmd: str, run_in_background: bool = False):
+    """Return a list of (problem, fix) for a command string.
+
+    `run_in_background` is the Bash tool's OWN parameter, forwarded from the PreToolUse payload
+    (`tool_input.run_in_background`). Only the offload rule reads it, and it reads it to STAY
+    SILENT: the remedy that rule recommends is that parameter, so firing when it is already set
+    would be a 100% false-positive rate on correct behaviour. Defaults False so the three test
+    files, which call `check(cmd)` positionally, keep asserting the foreground case.
+    """
     # Analyse the outer command with quoted DATA stripped, plus any nested-shell payloads
     # unwrapped — those are commands, not data. See NESTED above.
     # RAW is needed by the two instrument-lie checks below: their tell is inside a quoted
@@ -436,7 +443,93 @@ def check(cmd: str):
             f"append `# guard:ok`.",
         ))
 
+    # ── N+2. A MEASURED-SLOW COMMAND RUN IN THE FOREGROUND (2026-08-08) ───────────────────────
+    # THE REQUIREMENT, before the mechanism: an agent cannot be interrupted mid-tool-call. A
+    # foreground command that takes minutes is that many minutes of deafness -- it cannot poll,
+    # cannot answer, cannot react to what the command is printing. `run_in_background: true`
+    # removes exactly that cost and nothing else.
+    #
+    # THE COST IS WALL CLOCK, NOT OUTPUT VOLUME, and the message must say so. Measured
+    # 2026-08-08 over 13,527 commands in 57 sessions
+    # (conductor-bs/conductors/iotta/proposals/2026-08-08-offload-guard-measurement.md):
+    # **316 of 343 `pytest` invocations (92%) were ALREADY piped to `tail`/`head`.** Output
+    # volume has been handled by hand for three weeks; a guard framed around context bloat would
+    # fire on commands that deliver two lines. So this says "background it", NOT "hand it to the
+    # chore-runner" -- those are different remedies and the corpus says the second is not the gap.
+    #
+    # NARROWED TO THREE SHAPES BY MEASUREMENT, and the rejects matter as much as the keeps. Also
+    # measured, also rejected: bare `-v` (258 matches, dominated by `grep -v`, which SHRINKS
+    # output), `--all` (82, every sampled one already bounded), `history` (176, an English word --
+    # `~/.claude/history.jsonl`, "device history", "git history"), standalone `--verbose` (8), and
+    # `git log` (183 of 215 already bounded). Do not add them back without a new measurement;
+    # each was counted and thrown out, not overlooked.
+    #
+    # THE PROSE TRAP, and why this matches `cmd` and never `raw`: 28 of 30 `idf.py` corpus matches
+    # ARE NOT COMMANDS. They are card bodies describing the idf.ps1 incident and -- repeatedly --
+    # THIS FILE'S OWN TEST FIXTURES, which pass literal strings like
+    # `'. ./idf.ps1; idf.py -p COM7 flash'` to `check()`. A substring guard would spend most of
+    # its fires blocking documentation about itself, the failure rule 5's own comment warns of.
+    # `cmd` is already `shell_only()`-stripped (heredoc bodies and quoted spans removed) with
+    # nested `-c`/`-Command` payloads unwrapped, which is exactly the right surface here.
+    #
+    # THE WHOLE RULE IS GATED ON `run_in_background` being false. Without that gate it would fire
+    # identically whether or not the agent had already done the right thing -- a 100% false
+    # positive rate on correct behaviour, strictly worse than no guard. Verified before building:
+    # the PreToolUse payload does carry `tool_input.run_in_background` (see `main()`).
+    #
+    # Deliberately NOT gated on `agent_id`: unlike subagent_background_wait_guard.py, whose advice
+    # is only correct for a delegated agent, backgrounding a four-minute suite is right for the
+    # top-level conductor and a subagent alike -- the subagent just has to poll it rather than
+    # end its turn on it, which is that other hook's job to say.
+    if not run_in_background:
+        slow = _slow_foreground_shape(cmd)
+        if slow:
+            problems.append((
+                f"{slow} in the FOREGROUND. This tool call blocks for the command's entire "
+                f"runtime and you cannot be interrupted, poll anything, or react until it "
+                f"returns. Piping to `tail` does not help -- 92% of measured pytest runs were "
+                f"already piped; the uncaptured cost is wall-clock blocking, not output volume.",
+                "Re-issue this EXACT command with `run_in_background: true` -- that is a "
+                "PARAMETER on the Bash tool call, not text you add to the command string -- "
+                "then poll its output file until it finishes before you end the turn.\n"
+                "    If it is genuinely quick here (a one-test run, a warm no-op build), append "
+                "`# guard:ok`.",
+            ))
+
     return problems
+
+
+# ── The three shapes worth backgrounding, and nothing else. See rule N+2 for the measurement. ──
+# `pytest` counts only as a FULL SUITE: 130 of 333 real invocations had no test-file path and no
+# `-k`; the other 203 were targeted, fast, and must never fire. A DIRECTORY argument still reads
+# as full-suite -- `python -m pytest tests/ -q` is this estate's canonical whole-suite command,
+# so the discriminator is a `.py` FILE, a `::` nodeid, or `-k`, never "has an argument".
+_PYTEST_INVOCATION = re.compile(
+    r"(?:^|[;&|])\s*"                              # start of a shell segment (may be indented)
+    r"(?:\w+=\S+\s+)*"                             # leading env assignments: PYTHONPATH=src ...
+    r"(?:(?:python3?|py)(?:\s+-\d\S*)?\s+-m\s+)?"  # optional `python -m` / `py -3 -m`
+    r"pytest\b",
+    re.M,
+)
+# Requiring segment-start (or `-m`) is what keeps `grep -n pytest file` and
+# `cat notes-about-pytest.md` from matching: in those the word is an ARGUMENT, never the verb.
+_PYTEST_TARGETED = re.compile(r"\S+\.py\b|::|(?<!\w)-k(?=[\s=])")
+_NPM_SLOW = re.compile(r"\bnpm\s+run\s+(?:build|test)\b|\bnpm\s+test\b|\bvitest\s+run\b")
+# `\bflash\b` also catches `app-flash` (the hyphen is a word boundary) -- intended: it is the same
+# multi-minute serial write, and the existing rule-5 fixtures use exactly that spelling.
+_IDF_SLOW = re.compile(r"\bidf\.py\b[^;&|\n]*\b(?:build|flash|monitor)\b")
+
+
+def _slow_foreground_shape(text: str):
+    """Which measured-slow shape `text` is, or None. `text` must already be `shell_only()`-ed."""
+    for segment in re.split(r"[;\n]|&&|\|\|", text):
+        if _PYTEST_INVOCATION.search(segment) and not _PYTEST_TARGETED.search(segment):
+            return "A full-suite `pytest` run"
+    if _NPM_SLOW.search(text):
+        return "`npm run build` / `npm test` / `vitest run`"
+    if _IDF_SLOW.search(text):
+        return "`idf.py build`/`flash`/`monitor`"
+    return None
 
 
 # The status-page data files and the ONE sanctioned writer for each: (filename, tool, example).
@@ -599,13 +692,22 @@ def main() -> int:
 
     if payload.get("tool_name") != "Bash":
         return 0
-    cmd = (payload.get("tool_input") or {}).get("command") or ""
+    tool_input = payload.get("tool_input") or {}
+    cmd = tool_input.get("command") or ""
     if not cmd:
         return 0
     if OVERRIDE.search(cmd):
         return 0  # explicitly overridden; the token is the audit record
 
-    problems = check(cmd)
+    # `run_in_background` is a Bash tool PARAMETER, not part of the command string, and the
+    # offload rule's whole remedy is "set it" -- so the rule has to be able to see that it is
+    # already set. MEASURED 2026-08-08 before that rule was written, because if the field were
+    # absent the rule would fire identically on correct and incorrect behaviour and had to be
+    # abandoned: `subagent_background_wait_guard.py` (line ~140) gates on exactly
+    # `tool_input.get("run_in_background")` and reaches its reminder only past that gate -- and
+    # it demonstrably fires on backgrounded calls and stays silent on foreground ones carrying
+    # the same `# bg:ok` override text. The field is present, under `tool_input`.
+    problems = check(cmd, run_in_background=bool(tool_input.get("run_in_background")))
     if not problems:
         return 0
 
