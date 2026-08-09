@@ -111,6 +111,12 @@ def handle_post(payload):
     extra = {"chars": chars, "tool": tool, "spooled": spooled}
     if size is not None:
         extra["spooled_size"] = size
+    # Whose context did this output land in? `session` is the TOP-LEVEL session id and is
+    # identical for the conductor and every subagent under it, so without this field a fan-out's
+    # volume is one undifferentiated stream. Absent for the top-level actor by design.
+    agent_id = payload.get("agent_id")
+    if isinstance(agent_id, str) and agent_id:
+        extra["agent_id"] = agent_id
 
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import hook_log

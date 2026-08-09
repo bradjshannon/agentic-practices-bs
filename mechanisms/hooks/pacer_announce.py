@@ -257,7 +257,27 @@ def main() -> int:
     # visibly inconsistent with this one).
     out = [f"[pacer heartbeat — post this line VERBATIM as the first line of your reply]\n{line}"]
 
-    # Subagent liveness: DELIBERATELY NOT DONE HERE, and the reason is worth keeping.
+    # Subagent liveness — NOW DONE HERE (2026-08-09), by a route the NOTE below did not consider.
+    # That note rejected transcript SIZE+MTIME and was right to. A later design, an OS-clock
+    # ticker backgrounded by the agent, was also built-and-rejected: MEASURED, a probe agent's
+    # backgrounded shell kept writing for 7m38s after the agent finished and stopped only when
+    # killed by hand, because every tool shell in a session is a child of ONE shared process and
+    # the harness reaps nothing at agent-stop. Ticker-absence therefore means nothing.
+    # What survives: a marker written from the agent's OWN tool calls. Only the agent can cause
+    # one, so it cannot lie about liveness. Injected here rather than left to a CLI because a
+    # reader nobody remembers to run is Voluntary class, and this exists because a conductor did
+    # not notice a dead agent for 4h08m. Its blind spot (a long foreground call) and its weakness
+    # (a pulse is not progress) are documented in agent_activity.py and stated in its own output.
+    # Fail-open in its own right: a break here must not cost the heartbeat line above.
+    try:
+        import runpy as _runpy
+        _aa = _runpy.run_path(str(Path.home() / ".claude" / "hooks" / "agent_activity.py"))
+        out.extend(_aa["summary_lines"](payload.get("session_id")) or [])
+    except Exception:
+        pass
+
+    # HISTORICAL NOTE — why the SIZE+MTIME version was rejected. Kept because the measurement
+    # is still true and still rules that approach out.
     # Brad, 2026-07-31: "you should check these things on pacer fire, for subagents", after a
     # dispatched agent sat dead for 4h08m while the conductor enforced constraints on its behalf.
     # The proposed tell was transcript SIZE + MTIME. It does not work: MEASURED the same hour,
