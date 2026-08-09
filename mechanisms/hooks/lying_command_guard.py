@@ -436,6 +436,70 @@ def check(cmd: str, run_in_background: bool = False):
                 ))
                 break
 
+    # N. A BRANCH SWITCH inside a PRIMARY repo checkout -- the shared tree that a conductor and
+    #    every other agent are all writing to at once.
+    #
+    #    Ten instances in this project by 2026-08-09, four distinct mechanisms, and the last two
+    #    were structural rather than careless: the conductor-owned status-page data files
+    #    (needs-you.md, inbox.jsonl, finds.jsonl) live in the primary checkout because that is
+    #    where the status server reads and writes them, so a conductor commit of one lands on
+    #    whatever branch an agent switched that tree to. The existing controls cannot see it --
+    #    capture-the-branch-and-assert-after DETECTS the collision and cannot prevent it, and
+    #    `isolation: "worktree"` covers only the session's own repo.
+    #
+    #    The prevention is that AGENTS stop checking out in the primary tree at all. Since
+    #    2026-08-09 `worktree_fleet.py` provisions per-repo worktrees from current HEAD and
+    #    junctions server/ui/node_modules, so there is no longer a cost to doing it right.
+    #
+    #    NARROW ON PURPOSE. Only a branch switch fires. `git checkout -- <path>`,
+    #    `--theirs/--ours/--patch` and a detached-hash checkout are path/inspection operations and
+    #    are left alone -- a guard that cried wolf on those would be turned off inside a day, and
+    #    this codebase's own doctrine is that such a guard takes its true positives with it.
+    _PRIMARY = re.compile(r"[/\\]Documents[/\\]GitHub[/\\](iotta-bs|iotta-firmware|conductor-bs|"
+                          r"conductor-pub|agentic-practices-bs)[/\\]?$")
+    _NOT_PRIMARY = re.compile(r"\.wt[/\\]|worktrees[/\\]|scratchpad|[/\\]Temp[/\\]", re.I)
+    if "guard:ok" not in raw:
+        argvish2 = QUOTED.sub(" Q ", HEREDOC.sub(" ", raw))
+        for segment in re.split(r"[;\n]|&&|\|\|", argvish2):
+            sub = _git_subcommand(segment)
+            if sub not in ("checkout", "switch"):
+                continue
+            # Path-restore and merge-resolution forms are not branch switches.
+            if re.search(r"(?<![\w-])--(?:$|\s)|--theirs|--ours|--patch|(?<![\w-])-p(?![\w-])",
+                         segment):
+                continue
+            # A `cd` into a worktree or scratchpad earlier in the same command means the bare
+            # `git` that follows is NOT operating on the primary tree. Without this the rule
+            # fires on `cd <worktree> || exit 1` followed by `git checkout -b ...` -- which is
+            # the exact pattern it exists to encourage, i.e. a 100% false positive on correct
+            # behaviour. Caught by the negative control before this shipped, not after.
+            if re.search(r"\bcd\s+\S*(?:\.wt|worktrees|scratchpad)\S*", raw, re.I):
+                continue
+            m = re.search(r"\bgit\s+-C\s+(\"[^\"]*\"|'[^']*'|\S+)", raw)
+            target = m.group(1).strip("\"'") if m else ""
+            if m:
+                # An explicit -C into a worktree or scratchpad path is exactly the right thing.
+                if _NOT_PRIMARY.search(target) or not _PRIMARY.search(target.rstrip("/\\")):
+                    continue
+            problems.append((
+                "A branch switch inside a PRIMARY repo checkout. That tree is shared -- the "
+                "conductor's status-page data files live in it and other agents write to it, so "
+                "switching its branch silently redirects THEIR commits onto yours and yours onto "
+                "theirs. It has happened ten times in this project; the last two were the "
+                "conductor's own commits landing on a live lot's branch. Capturing the branch and "
+                "asserting it afterwards detects this and cannot prevent it.",
+                "Provision your own worktree instead, then work there:\n"
+                "      python C:\\Users\\brad\\Documents\\GitHub\\conductor-bs\\tools\\"
+                "worktree_fleet.py provision <repo> --branch <name>\n"
+                "    It branches from CURRENT HEAD (not the session-start commit) and junctions "
+                "server/ui/node_modules, so vitest and tsc run with no npm install.\n"
+                "    WARNING: never `git worktree remove` a junctioned worktree by hand -- removal "
+                "FOLLOWS the junction and deletes the SOURCE node_modules. The tool unlinks first.\n"
+                "    If you genuinely must switch the shared tree (you are the only actor, or you "
+                "are restoring it to main at the end of a run), append `# guard:ok`.",
+            ))
+            break
+
     # N. A hand-rolled write to any of a conductor's status-page data files. This is the exact
     #    shape that produced a stale thread pin on 2026-08-03: `written_at` typed by hand (wrong,
     #    missing, or copy-pasted stale), a field name typo invisible to the writer but invisible to
