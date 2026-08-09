@@ -514,6 +514,14 @@ _PYTEST_INVOCATION = re.compile(
 # Requiring segment-start (or `-m`) is what keeps `grep -n pytest file` and
 # `cat notes-about-pytest.md` from matching: in those the word is an ARGUMENT, never the verb.
 _PYTEST_TARGETED = re.compile(r"\S+\.py\b|::|(?<!\w)-k(?=[\s=])")
+# FOUND LIVE 2026-08-08, on the FIRST command issued after installing this rule:
+# `python -m pytest --version` was blocked as "a full-suite run". It executes no tests and
+# returns instantly -- it just has no file path and no `-k`, so the full-suite test above said
+# yes. Same class as rule 4b's quoted-path false positive: the rule recommending backgrounding
+# for an instant command is precisely how a guard gets overridden by reflex and takes its true
+# positives with it. These flags mean "pytest will not RUN anything", so they are not a suite.
+_PYTEST_NOT_A_RUN = re.compile(
+    r"(?<!\w)(?:--version|-V|--help|-h|--collect-only|--co|--fixtures|--markers)(?![\w-])")
 _NPM_SLOW = re.compile(r"\bnpm\s+run\s+(?:build|test)\b|\bnpm\s+test\b|\bvitest\s+run\b")
 # `\bflash\b` also catches `app-flash` (the hyphen is a word boundary) -- intended: it is the same
 # multi-minute serial write, and the existing rule-5 fixtures use exactly that spelling.
@@ -523,7 +531,9 @@ _IDF_SLOW = re.compile(r"\bidf\.py\b[^;&|\n]*\b(?:build|flash|monitor)\b")
 def _slow_foreground_shape(text: str):
     """Which measured-slow shape `text` is, or None. `text` must already be `shell_only()`-ed."""
     for segment in re.split(r"[;\n]|&&|\|\|", text):
-        if _PYTEST_INVOCATION.search(segment) and not _PYTEST_TARGETED.search(segment):
+        if (_PYTEST_INVOCATION.search(segment)
+                and not _PYTEST_TARGETED.search(segment)
+                and not _PYTEST_NOT_A_RUN.search(segment)):
             return "A full-suite `pytest` run"
     if _NPM_SLOW.search(text):
         return "`npm run build` / `npm test` / `vitest run`"

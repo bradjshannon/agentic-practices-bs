@@ -179,6 +179,15 @@ cases = [
     # THE PROSE TRAP, §3: 28 of 30 corpus `idf.py` matches are text, not commands -- including
     # this file's own fixtures. A heredoc body must be invisible to this rule.
     ("ALLOW", "python - <<'PY'\nprint('the runbook says to run idf.py build first')\nPY"),
+    # FOUND LIVE 2026-08-08 on the FIRST command issued after installing this rule: pytest
+    # invocations that RUN NOTHING have no file path and no `-k` either, so the full-suite test
+    # said yes and blocked an instant command. Both directions kept, so the narrowing cannot be
+    # silently widened back.
+    ("ALLOW", "python -m pytest --version"),
+    ("ALLOW", "pytest --collect-only -q"),
+    ("ALLOW", "pytest --fixtures"),
+    ("ALLOW", "pytest -h"),
+    ("BLOCK", "python -m pytest -q"),   # ...and a real bare suite run still fires
     # Near-miss controls: the neighbouring subcommands of each guarded shape are NOT slow.
     ("ALLOW", "npm install"),
     ("ALLOW", "npm run dev"),
