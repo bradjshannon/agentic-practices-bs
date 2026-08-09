@@ -29,6 +29,7 @@ Exit 2 blocks the call and shows stderr to the model. Exit 0 allows.
 import json
 import re
 import os
+import shutil
 import sys
 
 
@@ -227,6 +228,49 @@ def check(cmd: str, run_in_background: bool = False):
             "Call the wrapper directly: `.\\idf.ps1 build` / `.\\idf.ps1 -p COM7 app-flash`. "
             "Then confirm the build really happened by comparing build/iotta_firmware.bin size "
             "before and after — never trust the exit code.",
+        ))
+
+    # 5b. A bare `docker` command on a host where docker is not on PATH -- observed 2026-08-09:
+    #     `docker logs iotta-bs-iotta-1 | grep -c capture-stream` returned 0 from Git Bash, and
+    #     the conductor was one step from treating that as CONTRADICTING a firmware lot's report.
+    #     The real cause was `docker: command not found`; docker lives in WSL2 on this host, not
+    #     on the Windows PATH. An instrument's silence is not data, and grep's "0" on a command
+    #     that never ran is the cheapest possible instance of it -- indistinguishable from a real
+    #     zero-match count unless you separately notice the shell printed nothing else.
+    #
+    #     SELF-CALIBRATING, DELIBERATELY NOT HARDCODED "docker lives in WSL": that fact is
+    #     measured true on `video` and UNVERIFIED on `workpc`, and this file is mirrored
+    #     cross-machine. Gating on `shutil.which("docker") is None` makes the rule correct on
+    #     both machines by construction -- silent where docker is really on PATH, and unable to
+    #     false-positive there since the `which` check fails closed only when docker cannot be
+    #     found at all.
+    #
+    #     Matches on `cmd` (shell_only()-stripped, nested -c/-Command payloads unwrapped), never
+    #     `raw` -- the same reason rule 5 above stays on `cmd`. This is also what makes
+    #     `wsl -e bash -lc "docker …"` a no-fire for free: `-lc` is not `-Command`/`-c` as a
+    #     token, so NESTED never unwraps that payload, and shell_only() strips it as ordinary
+    #     quoted DATA before this rule ever sees it. A prose mention ("see docker: command not
+    #     found from 2026-08-09") inside a commit message or heredoc is stripped the same way.
+    #
+    #     `(?!-)` excludes `docker-compose` -- a different binary this rule was not measured
+    #     against; widen only after a second incident names it.
+    #
+    #     `docker -v`/`docker --version` is excluded, same reasoning as the pytest
+    #     `--version`/`--help` exclusions above: it fails just as loudly on its own (no pipe
+    #     downstream can misread its output as a real answer), and there is a pre-existing ALLOW
+    #     fixture for it in the test file.
+    _docker_m = re.search(r"(?:^|[;&|\n])\s*(?:\w+=\S+\s+)*docker(?!-)\b([^;&|\n]*)", cmd)
+    if (_docker_m
+            and not re.search(r"(?<!\w)(?:-v|--version|--help|-h)(?!\w)", _docker_m.group(1))
+            and shutil.which("docker") is None):
+        problems.append((
+            "Bare `docker …` on a host where `docker` is not on PATH (checked via "
+            "`shutil.which`). It fails as `docker: command not found`, and a pipe after it "
+            "(`| grep -c …`) reports a confident-looking `0` that means \"the command never "
+            "ran\", not \"zero matches\" -- indistinguishable from a real empty result.",
+            "If docker lives in WSL2 on this host, route through it: "
+            "`wsl -e bash -lc \"docker …\"`. If docker is genuinely not needed here, "
+            "append `# guard:ok`.",
         ))
 
     # N. Counting CR bytes through a Git Bash pipe. MSYS applies text-mode translation on the

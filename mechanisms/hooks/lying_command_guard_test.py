@@ -46,6 +46,24 @@ cases = [
     ("ALLOW", "idf.py build", "in the FOREGROUND"),
     ("ALLOW", "grep -n idf.ps1 CLAUDE.md"),
     ("ALLOW", "cat idf.ps1"),
+    # 5b: bare docker on a host with no docker on PATH (this test host has none -- see docker
+    # module docstring in lying_command_guard.py). The 2026-08-09 shape: a pipe after a bare
+    # docker call reads a confident-looking 0 as "zero matches" instead of "never ran".
+    ("BLOCK", "docker logs iotta-bs-iotta-1 | grep -c capture-stream"),
+    ("BLOCK", "docker ps"),
+    # `docker-compose` is a DIFFERENT binary, not measured against this rule -- must not fire.
+    ("ALLOW", "docker-compose up -d"),
+    # Version/help checks fail just as loudly standing alone; no pipe downstream can misread them,
+    # and there is deliberately no WSL-routing advice worth giving for a one-shot version check.
+    ("ALLOW", "docker -v"),
+    ("ALLOW", "docker --version"),
+    # Already routed through WSL2 -- the quoted payload is DATA to this rule (matches rule 5's own
+    # reasoning: `-lc` is not `-Command`/`-c` as a token, so NESTED never unwraps it, and
+    # shell_only() strips the quoted span before this rule ever sees "docker").
+    ("ALLOW", 'wsl -e bash -lc "docker logs iotta-bs-iotta-1 | grep -c capture-stream"'),
+    # A commit message or heredoc merely DESCRIBING the trap is prose, not a command.
+    ("ALLOW", 'git commit -m "docs: docker is not on PATH on the host, route through wsl"',
+     "Raw `git commit`"),
     # Nested-payload change: a real command inside -c/-Command must be seen...
     ("BLOCK", 'bash -c "cd /tmp ' + "&& git log" + '"'),
     ("BLOCK", "cd /tmp " + "&& git status"),
