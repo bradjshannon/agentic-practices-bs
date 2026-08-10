@@ -191,25 +191,38 @@ def deny(reason):
 DENY_TEXT = (
     "Bounded work dispatched through `Agent` needs an upfront wall-clock estimate, recorded "
     "BEFORE the work happens -- so it can be compared to reality afterward without the "
-    "estimate being revised in hindsight. Add a line anywhere in the prompt:\n\n"
-    "  ESTIMATE: <number><unit>   e.g. ESTIMATE: 20m / ESTIMATE: 2h / ESTIMATE: 90s\n\n"
+    "estimate being revised in hindsight. Put it in the `description` field, NOT in the "
+    "prompt -- it is tracking metadata, not something the subagent should read:\n\n"
+    "  description: \"fix login redirect ESTIMATE: 20m\"\n"
+    "  units: s / m / h / d   e.g. ESTIMATE: 90s / ESTIMATE: 2h\n\n"
     "If this dispatch genuinely isn't bounded work (a quick lookup, exploratory research with "
     "no natural finish line), use the escape hatch instead -- logged, not silent:\n\n"
-    "  ESTIMATE: skip <one-line reason>\n"
+    "  description: \"survey the codebase ESTIMATE: skip <one-line reason>\"\n"
 )
 
 
 def handle_pre(payload):
     tool_input = payload.get("tool_input") or {}
     prompt = tool_input.get("prompt") or ""
-    seconds, raw = parse_estimate(prompt)
+    description = tool_input.get("description") or ""
+
+    # `description` is the carrier, checked FIRST. It is a short label the harness records and
+    # never delivers to the subagent as instructions, so an estimate written there cannot leak
+    # into the brief at all -- which is stronger than redacting it out of the prompt afterwards,
+    # because the prompt is also what a human reads in the transcript. The prompt fallback below
+    # stays for back-compat and is redacted on the way through.
+    seconds, raw = parse_estimate(description)
+    from_prompt = False
+    if raw is None:
+        seconds, raw = parse_estimate(prompt)
+        from_prompt = raw is not None
 
     if raw is None:
         return deny(DENY_TEXT)
     if seconds is None:
         # explicit skip
         _log(f"SKIP: {raw[:160]}")
-        return allow_redacted(tool_input, prompt)
+        return allow_redacted(tool_input, prompt) if from_prompt else allow()
 
     path = _state_path(payload.get("session_id"))
     state = _load(path)
@@ -221,7 +234,9 @@ def handle_pre(payload):
         "dispatched_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
     })
     _save(path, state)
-    allow_redacted(tool_input, prompt)
+    if from_prompt:
+        allow_redacted(tool_input, prompt)
+    allow()
 
 
 def agent_id_from(response):

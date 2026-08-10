@@ -83,6 +83,53 @@ with tempfile.TemporaryDirectory() as tmp:
     check("the rest of the prompt survives redaction intact",
           redacted_prompt, "Do the thing.\n")
 
+    # The `description` field is the intended carrier: the estimate never enters the prompt, so
+    # there is nothing to redact and nothing a human reading the transcript has to skip past.
+    # Negative control below: an estimate in NEITHER field must still deny, otherwise this pair
+    # of checks would pass against a hook that simply stopped enforcing anything.
+    desc_payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Agent",
+        "session_id": "desc-session",
+        "tool_input": {
+            "description": "port the widget ESTIMATE: 15m",
+            "prompt": "Do the thing.\n",
+            "subagent_type": "general-purpose",
+        },
+    }
+    captured_desc = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(captured_desc):
+            m["handle_pre"](desc_payload)
+        desc_denied = False
+    except SystemExit as e:
+        desc_denied = e.code not in (0, None)
+    check("ESTIMATE in description alone does not deny", desc_denied, False)
+    check("description carrier leaves the prompt untouched (no updatedInput)",
+          captured_desc.getvalue().strip(), "")
+    desc_state = json.load(open(os.path.join(tmp, "estimate-registry-desc-session.json")))
+    check("description carrier still records the estimate",
+          desc_state["pending"][0]["estimate_seconds"], 900.0)
+
+    none_payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Agent",
+        "session_id": "none-session",
+        "tool_input": {
+            "description": "port the widget",
+            "prompt": "Do the thing.\n",
+            "subagent_type": "general-purpose",
+        },
+    }
+    none_out = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(none_out):
+            m["handle_pre"](none_payload)
+    except SystemExit:
+        pass
+    check("NEGATIVE CONTROL: no estimate in either field still denies",
+          json.loads(none_out.getvalue())["hookSpecificOutput"]["permissionDecision"], "deny")
+
     post_payload = {
         "hook_event_name": "PostToolUse",
         "tool_name": "Agent",
