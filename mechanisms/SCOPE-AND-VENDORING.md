@@ -17,16 +17,38 @@ production across two repos, and none of them were in the corpus.
 
 ---
 
-## OPEN FORK — needs the operator's call before anyone builds this
+## SETTLED — marked regions, and the tooling enforces the boundary
 
 **May a vendored mechanism be edited in the repo that consumes it?**
+**Inside its declared regions, yes. Outside them, no, and the tool refuses rather than clobbering.**
 
-My recommendation is **no — read-only mirror plus a lock file.** Hand-editing on both sides is
-precisely what forced `conductor-sync.py` to refuse to guess a sync direction, and that ambiguity
-is the expensive one: once both sides are authored, no tool can tell a local improvement from a
-stale copy, and every sync becomes a human judgement. A read-only mirror keeps drift detection
-mechanical. The cost is real and should be weighed rather than waved at — a repo needing a tweak
-must push it upstream first, and a mechanism that is awkward to adapt tends not to get adopted.
+The operator asked for exactly this on 2026-08-10 — *"can we have sections of code that are
+overwritten on updates from upstream, but other sections that the user can alter safely?"* — and it
+was built the same hour: `conductor-pub/tools/conductor_graft.py` plus
+`conductor-pub/docs/marked-regions.md` (`4cedfc4`, then `eafc077` closing three falsifications of
+"nothing can be lost"). Upstream owns the file and declares the regions; the consumer owns what is
+inside them; an edit *outside* a region makes the next update exit non-zero with `CONFLICT` instead
+of overwriting silently.
+
+Verified end to end rather than read: an adopt → check → apply cycle on a Python hook, where
+upstream's out-of-region change landed while the consumer's in-region line survived byte-for-byte,
+and a deliberate out-of-region edit produced `CONFLICT`, exit 1. **It is not skills-only** — nothing
+in `conductor_graft.py` filters by path or suffix, and `#` is one of six recognised comment openers.
+
+⚠️ **This section previously read `OPEN FORK — needs the operator's call before anyone builds this`
+and recommended a read-only mirror plus a lock file. That is quoted here for audit because the
+recommendation was acted on elsewhere:** the same framing reached a decision card, which then sat on
+the board for sixteen hours asking a question the operator's own comment had already closed.
+
+What the old text got right and is worth keeping: hand-editing both sides is what forced
+`conductor-sync.py` to refuse to guess a sync direction, and once both sides are authored no tool
+can tell a local improvement from a stale copy. Marked regions answer that by making the ownership
+boundary *declared and machine-checked* rather than inferred — which is why the fork dissolved
+instead of being decided.
+
+**What is genuinely open is work, not a decision:** no mechanism carries a region yet, and the four
+hooks shipped in `conductor-pub/hooks/` are 31–59% similar to their twins in this corpus with
+nothing reporting the gap. Comparator first, manifest second.
 
 A second question that looks like a fork and is not: **where a repo-scoped mechanism's
 authoritative copy lives.** For the three genuinely portable tools identified below, this corpus.
