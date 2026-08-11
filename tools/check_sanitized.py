@@ -63,7 +63,14 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("host", re.compile(r"\btail[0-9a-f]{6,}\b", re.IGNORECASE)),  # the tailnet id itself
     ("operator", re.compile(r"\baiadmin\b")),
     ("operator-path", re.compile(r"/home/aiadmin\b")),
-    ("operator-path", re.compile(r"C:\\Users\\brads", re.IGNORECASE)),
+    # Both workstation usernames, and the trailing separator is load-bearing twice over.
+    # Found 2026-08-11: this read `C:\\Users\\brads` -- the OTHER workstation -- so this
+    # machine's `C:\Users\brad\...` never matched, and two real operator home paths sat in
+    # this public repo with CI green. A check that cannot fail reports clean forever. The
+    # separator keeps it off `bradley` and any longer name, because a guard that cries wolf
+    # gets bypassed and takes its true positives with it. Both directions covered in
+    # check_sanitized_test.py, which did not exist until this was found.
+    ("operator-path", re.compile(r"C:[\\/]Users[\\/]brads?[\\/]", re.IGNORECASE)),
     ("operator-path", re.compile(r"D:/GitHub", re.IGNORECASE)),
     ("host", re.compile(r"\baidemo\d*\b", re.IGNORECASE)),
     ("host", re.compile(r"\baiserver0*\d+\b", re.IGNORECASE)),
