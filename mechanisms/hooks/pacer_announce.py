@@ -43,12 +43,17 @@ INBOX = Path.home() / "Documents" / "GitHub" / "conductor-bs" / "conductors" / "
 # line itself by fires_at). Keyed per-entry (see _entry_key), not per-fire, so an entry surfaced
 # once stays surfaced across every later pacer fire even though fires_at keeps changing.
 INBOX_SURFACED = Path.home() / ".claude" / "conductor-inbox-surfaced.json"
-# The status-page link is per-machine AND per-conductor (video uses :9443, the server conductor
-# uses :8787, and the tailnet host differs on workpc). So it is NOT hardcoded: turn-pacer.py reads
+# The status-page link is per-machine AND per-conductor (each conductor listens on its own port,
+# and the host differs from machine to machine). So it is NOT hardcoded: turn-pacer.py reads
 # the CONDUCTOR_STATUS_URL env var when it arms and stamps it into pacer-armed.json, which this hook
 # reads below. Fallbacks: the env var directly (in case an older pacer-armed.json lacks the field),
-# then this last-resort default (this machine's).
-DEFAULT_LINK = "https://video.tail54e284.ts.net:9443/"
+# then this last-resort default.
+#
+# That default is a deliberately NON-ROUTABLE placeholder — `.invalid` is reserved by RFC 2606 and
+# can never resolve. This file is public, so the real host belongs in CONDUCTOR_STATUS_URL, not in
+# the source. Reaching this fallback means neither source was set, and an unresolvable link says so
+# out loud instead of quietly pointing at something real.
+DEFAULT_LINK = "https://conductor-status.invalid:9443/"
 
 # Only enforce in conductor sessions (same scoping as pacer_armed.py) — a pacer armed from an
 # unrelated project should not inject a conductor heartbeat.

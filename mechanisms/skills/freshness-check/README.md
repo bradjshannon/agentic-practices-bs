@@ -26,7 +26,7 @@ Contents of this directory:
 
 `SKILL.md` and `check_freshness.py` have both been fixed since the original copy — see
 [Divergence from the deployed copy](#divergence-from-the-deployed-copy) for what changed and why
-the deployed install on `video` already has it.
+the deployed install on the authoring workstation already has it.
 
 ## Install
 
@@ -236,7 +236,7 @@ The goal is **no divergence at all**: a "portable" copy that quietly diverges fr
 actually running on a machine is the drift this repo exists to document — a fix applied here
 never reaches the box, a fix applied there never reaches anyone else.
 
-**On `video` there is no second copy to diverge.** `~/.claude/skills/freshness-check` is a
+**On the authoring workstation there is no second copy to diverge.** `~/.claude/skills/freshness-check` is a
 directory junction into this directory (see the next section), so editing either path edits the
 same bytes and re-syncing is a no-op. That is why the earlier note here — "corrected here only,
 the deployed copy is not edited from this repo" — was wrong about its own setup: the correction
@@ -259,9 +259,9 @@ Fixes since the copy, applied to the single junctioned file (so both paths carry
 
 Copied 2026-07-27.
 
-## Installed by junction on `video` (2026-07-27)
+## Installed by junction on the authoring workstation (2026-07-27)
 
-`video` does not hold a copy of this skill — `~/.claude/skills/freshness-check` is a **directory
+That machine does not hold a copy of this skill — `~/.claude/skills/freshness-check` is a **directory
 junction** pointing here, so `git pull` on this repo *is* the update:
 
 ```

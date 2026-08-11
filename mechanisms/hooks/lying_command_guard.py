@@ -239,7 +239,7 @@ def check(cmd: str, run_in_background: bool = False):
     #     zero-match count unless you separately notice the shell printed nothing else.
     #
     #     SELF-CALIBRATING, DELIBERATELY NOT HARDCODED "docker lives in WSL": that fact is
-    #     measured true on `video` and UNVERIFIED on `workpc`, and this file is mirrored
+    #     measured true on one machine and UNVERIFIED on the other, and this file is mirrored
     #     cross-machine. Gating on `shutil.which("docker") is None` makes the rule correct on
     #     both machines by construction -- silent where docker is really on PATH, and unable to
     #     false-positive there since the `which` check fails closed only when docker cannot be
