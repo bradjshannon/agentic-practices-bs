@@ -64,6 +64,29 @@ def nested_payloads(cmd: str) -> str:
     return " ; ".join(m.group(1)[1:-1] for m in NESTED.finditer(cmd))
 
 
+def _docker_on_path() -> bool:
+    """Whether `docker` resolves on this host's PATH. Rule 5b's only environment input.
+
+    A SEAM, and the reason it exists is worth stating: rule 5b is LIVE only where docker is
+    absent. On any host where docker IS present -- every GitHub runner -- the rule can never
+    fire, so its fixtures stop testing it. That played out in both directions at once:
+
+      * the two BLOCK fixtures ("docker ps", "docker logs … | grep -c …") HARD-FAILED on CI,
+        which is what held `guard-ledger-freshness` red (130/132, exit 1) and dragged four
+        unrelated GUARD-LEDGER rows to STALE as collateral -- the rows cite this suite, and
+        `check_guard_ledger_freshness.py` reads any nonzero exit as staleness;
+      * the five ALLOW fixtures around them passed VACUOUSLY on CI -- with rule 5b deleted
+        outright they would still have been green there, because a dead rule fires on nothing.
+
+    Overriding it is deliberately NOT an env var. An env var that switches a guard off is a
+    bypass any agent could set from the command line; this is a module attribute a test
+    replaces in-process, so both branches are asserted on every host while the guard itself
+    stays unbypassable. Keep the `shutil.which` call here and nowhere else, so there is exactly
+    one thing to override.
+    """
+    return shutil.which("docker") is not None
+
+
 def check(cmd: str, run_in_background: bool = False):
     """Return a list of (problem, fix) for a command string.
 
@@ -240,10 +263,11 @@ def check(cmd: str, run_in_background: bool = False):
     #
     #     SELF-CALIBRATING, DELIBERATELY NOT HARDCODED "docker lives in WSL": that fact is
     #     measured true on one machine and UNVERIFIED on the other, and this file is mirrored
-    #     cross-machine. Gating on `shutil.which("docker") is None` makes the rule correct on
-    #     both machines by construction -- silent where docker is really on PATH, and unable to
+    #     cross-machine. Gating on `not _docker_on_path()` makes the rule correct on both
+    #     machines by construction -- silent where docker is really on PATH, and unable to
     #     false-positive there since the `which` check fails closed only when docker cannot be
-    #     found at all.
+    #     found at all. That environment read is isolated in `_docker_on_path()` so the tests
+    #     can assert BOTH branches on any host; see its docstring for why it is not an env var.
     #
     #     Matches on `cmd` (shell_only()-stripped, nested -c/-Command payloads unwrapped), never
     #     `raw` -- the same reason rule 5 above stays on `cmd`. This is also what makes
@@ -262,7 +286,7 @@ def check(cmd: str, run_in_background: bool = False):
     _docker_m = re.search(r"(?:^|[;&|\n])\s*(?:\w+=\S+\s+)*docker(?!-)\b([^;&|\n]*)", cmd)
     if (_docker_m
             and not re.search(r"(?<!\w)(?:-v|--version|--help|-h)(?!\w)", _docker_m.group(1))
-            and shutil.which("docker") is None):
+            and not _docker_on_path()):
         problems.append((
             "Bare `docker …` on a host where `docker` is not on PATH (checked via "
             "`shutil.which`). It fails as `docker: command not found`, and a pipe after it "

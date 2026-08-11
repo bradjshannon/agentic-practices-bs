@@ -46,21 +46,9 @@ cases = [
     ("ALLOW", "idf.py build", "in the FOREGROUND"),
     ("ALLOW", "grep -n idf.ps1 CLAUDE.md"),
     ("ALLOW", "cat idf.ps1"),
-    # 5b: bare docker on a host with no docker on PATH (this test host has none -- see docker
-    # module docstring in lying_command_guard.py). The 2026-08-09 shape: a pipe after a bare
-    # docker call reads a confident-looking 0 as "zero matches" instead of "never ran".
-    ("BLOCK", "docker logs iotta-bs-iotta-1 | grep -c capture-stream"),
-    ("BLOCK", "docker ps"),
-    # `docker-compose` is a DIFFERENT binary, not measured against this rule -- must not fire.
-    ("ALLOW", "docker-compose up -d"),
-    # Version/help checks fail just as loudly standing alone; no pipe downstream can misread them,
-    # and there is deliberately no WSL-routing advice worth giving for a one-shot version check.
-    ("ALLOW", "docker -v"),
-    ("ALLOW", "docker --version"),
-    # Already routed through WSL2 -- the quoted payload is DATA to this rule (matches rule 5's own
-    # reasoning: `-lc` is not `-Command`/`-c` as a token, so NESTED never unwraps it, and
-    # shell_only() strips the quoted span before this rule ever sees "docker").
-    ("ALLOW", 'wsl -e bash -lc "docker logs iotta-bs-iotta-1 | grep -c capture-stream"'),
+    # 5b's fixtures do NOT live here -- see DOCKER_CASES below. They are the one rule whose
+    # verdict depends on the host, so running them in this list made them assert the runner
+    # rather than the guard.
     # A commit message or heredoc merely DESCRIBING the trap is prose, not a command.
     ("ALLOW", 'git commit -m "docs: docker is not on PATH on the host, route through wsl"',
      "Raw `git commit`"),
@@ -278,7 +266,80 @@ cases = [
     ("ALLOW", "sed -n '1,40p' tools/ota-push.ps1"),
 ]
 
+# ── RULE 5b: asserted on BOTH hosts, never gated on this one ──────────────────────────────────
+# Rule 5b fires only where docker is absent from PATH, so on a docker-PRESENT host it cannot fire
+# at all. Left in the flat `cases` list above, that meant the fixtures measured the runner instead
+# of the guard, in both directions at once:
+#
+#   * on GitHub's ubuntu-latest (docker IS present) the two BLOCK cases HARD-FAILED -- 130/132,
+#     exit 1. `tools/check_guard_ledger_freshness.py` reads any nonzero exit from a cited test as
+#     staleness, so four unrelated GUARD-LEDGER rows citing this suite went STALE and the
+#     `guard-ledger-freshness` job was red on every push;
+#   * the surrounding ALLOW cases passed VACUOUSLY there -- delete rule 5b outright and they stay
+#     green, because a dead rule fires on nothing. That is the failure this ledger opens with: a
+#     check that cannot fail reports green forever.
+#
+# The fix is to ASSERT the behaviour rather than skip it: `_docker_on_path` is a seam, so each
+# case names the host it is about and both branches run everywhere. No case here depends on
+# whether the machine executing it has docker.
+guard_globals = check.__globals__
+
+
+class docker_present:
+    """Force rule 5b's only environment input, both ways, on any host.
+
+    Patches `check.__globals__` rather than the dict `runpy.run_path` returned: run_path hands
+    back a COPY, so mutating that copy would leave the function's real globals untouched and the
+    override would silently do nothing -- a test that believes it is exercising a branch it never
+    reaches.
+    """
+
+    def __init__(self, present): self.present = present
+
+    def __enter__(self):
+        self.prev = guard_globals["_docker_on_path"]
+        guard_globals["_docker_on_path"] = lambda: self.present
+
+    def __exit__(self, *exc):
+        guard_globals["_docker_on_path"] = self.prev
+
+
+# (docker on PATH?, want, command[, ignore])
+DOCKER_CASES = [
+    # ── docker ABSENT: the rule is live. The 2026-08-09 shape -- a pipe after a bare docker call
+    #    reads a confident-looking 0 as "zero matches" when it really means "never ran".
+    (False, "BLOCK", "docker logs iotta-bs-iotta-1 | grep -c capture-stream"),
+    (False, "BLOCK", "docker ps"),
+    # `docker-compose` is a DIFFERENT binary, not measured against this rule -- must not fire.
+    (False, "ALLOW", "docker-compose up -d"),
+    # Version/help checks fail just as loudly standing alone; no pipe downstream can misread them,
+    # and there is deliberately no WSL-routing advice worth giving for a one-shot version check.
+    (False, "ALLOW", "docker -v"),
+    (False, "ALLOW", "docker --version"),
+    # Already routed through WSL2 -- the quoted payload is DATA to this rule (matches rule 5's own
+    # reasoning: `-lc` is not `-Command`/`-c` as a token, so NESTED never unwraps it, and
+    # shell_only() strips the quoted span before this rule ever sees "docker").
+    (False, "ALLOW", 'wsl -e bash -lc "docker logs iotta-bs-iotta-1 | grep -c capture-stream"'),
+    # ── docker PRESENT: the rule must be silent. These are what makes the gate itself asserted
+    #    instead of assumed -- without them, hardcoding the rule to always fire would still pass.
+    (True, "ALLOW", "docker logs iotta-bs-iotta-1 | grep -c capture-stream"),
+    (True, "ALLOW", "docker ps"),
+]
+
 fails = 0
+for present, want, *rest in DOCKER_CASES:
+    c = rest[0]
+    ignore = rest[1] if len(rest) > 1 else None
+    with docker_present(present):
+        problems = check(c)
+    if ignore:
+        problems = [p for p in problems if ignore not in p[0]]
+    got = "BLOCK" if problems else "ALLOW"
+    ok = got == want
+    fails += 0 if ok else 1
+    print(f"{'ok  ' if ok else 'FAIL'} want={want:5} got={got:5}  "
+          f"[docker {'present' if present else 'absent '}]  {c}")
+
 for case in cases:
     want, c = case[0], case[1]
     ignore = case[2] if len(case) > 2 else None
@@ -297,5 +358,8 @@ for case in cases:
           + ("   [run_in_background=True]" if bg else ""))
 
 print()
-print(f"{len(cases) - fails}/{len(cases)} passed, {fails} failed")
+# DOCKER_CASES are counted in the total: `fails` accumulates across both loops, so a denominator
+# of len(cases) alone would under-report the suite and could print a "pass" wider than what ran.
+total = len(cases) + len(DOCKER_CASES)
+print(f"{total - fails}/{total} passed, {fails} failed")
 raise SystemExit(1 if fails else 0)
