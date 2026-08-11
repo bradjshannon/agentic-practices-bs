@@ -218,6 +218,64 @@ cases = [
     ("ALLOW", "python -m pytest tools/ -q", None, True),
     ("ALLOW", "npm run build", None, True),
     ("ALLOW", "idf.py build", None, True),
+    # ── Rule 6: the OTA delivery path (2026-08-11) ────────────────────────────────────────────
+    # (i) 6a -- the raw CLI primitives, in each shell shape they actually arrive in.
+    #     `ignore` names rule 5b (bare docker on a host with no docker on PATH), which fires on
+    #     every `docker exec` on this test host. Without it these cases would go green on 5b's
+    #     verdict and would still pass with rule 6a deleted -- a positive control that proves
+    #     nothing. Filtering 5b out makes BLOCK mean "6a fired", which is the actual assertion.
+    ("BLOCK", "docker exec iotta-bs-iotta-1 iotta-devices firmware-push "
+              "esp32-s3-audio-box-84c938 20260810-2019-d644a52-d0b5c13", "is not on PATH"),
+    ("BLOCK", 'wsl -e bash -lc "docker exec iotta-bs-iotta-1 iotta-devices firmware-release '
+              'esp32-s3-audio-box 20260810-2019-d644a52-d0b5c13"', "is not on PATH"),
+    ("BLOCK", "iotta-devices firmware-add esp32-s3-audio-box "
+              "20260810-2019-d644a52-d0b5c13 /tmp/iotta_firmware.bin"),
+    # (ii) 6a NEGATIVE CONTROLS. The emergency valve and the read-only listing must NEVER fire --
+    #      a guard in front of rollback is how you end up unable to undo a bad push. Same rule-5b
+    #      filter as above, for the same reason and in the opposite direction.
+    ("ALLOW", "docker exec iotta-bs-iotta-1 iotta-devices firmware-rollback esp32-s3-audio-box",
+     "is not on PATH"),
+    ("ALLOW", "docker exec iotta-bs-iotta-1 iotta-devices firmware-list esp32-s3-audio-box",
+     "is not on PATH"),
+    ("ALLOW", "iotta-devices show esp32-s3-audio-box-84c938"),
+    # ...and the words as an ARGUMENT rather than the verb: the reason 6a anchors on segment start.
+    ("ALLOW", 'grep -rn "iotta-devices firmware-push" tools/'),
+    # (iii) 6b -- the same operations over HTTP. Client AND route are both required.
+    ("BLOCK", "curl -X POST http://localhost:8000/admin/devices/"
+              "esp32-s3-audio-box-84c938/firmware-push"),
+    ("BLOCK", 'Invoke-RestMethod -Method Post -Uri "http://localhost:8000/admin/firmware/'
+              'esp32-s3-audio-box/20260810-2019-d644a52-d0b5c13/release"'),
+    ("BLOCK", 'python -c "import requests; requests.post('
+              "'http://localhost:8000/admin/devices/d1/firmware-push')\""),
+    ("BLOCK", 'curl -X POST "http://localhost:8000/admin/firmware/esp32-s3-audio-box/'
+              '20260810-2019-d644a52-d0b5c13"'),   # the bare add route
+    # (iv) 6b NEGATIVE CONTROLS -- the read and rollback routes over the same clients.
+    ("ALLOW", "curl -s http://localhost:8000/admin/firmware/esp32-s3-audio-box"),
+    ("ALLOW", "curl -X POST http://localhost:8000/admin/firmware/esp32-s3-audio-box/rollback"),
+    ("ALLOW", "curl -s http://localhost:8000/admin/firmware/esp32-s3-audio-box/"
+              "20260810-2019-d644a52-d0b5c13/elf"),
+    ("ALLOW", 'python -c "import requests; requests.get('
+              "'http://localhost:8000/admin/firmware/esp32-s3-audio-box')\""),
+    # A route named with NO client is documentation, not a call. This spells the route out in
+    # FULL on purpose: `_OTA_ROUTE` really does match this string, so the case passes only
+    # because 6b additionally requires an HTTP client in command position. An earlier version of
+    # this control grepped for the bare prefix `/admin/devices/`, which no route pattern matches
+    # -- it would have gone green with the client requirement deleted, i.e. it tested nothing.
+    ("ALLOW", 'grep -rn "/admin/devices/{device_id}/firmware-push" server/src/iotta/main.py'),
+    # (v) 6c -- the right script in the wrong shape. The first is the EXACT 2026-08-10 command.
+    ("BLOCK", 'pwsh -NoProfile -File "./tools/ota-deliver.ps1" -DeviceId d1 -Version v1'),
+    ("BLOCK", "./tools/ota-push.ps1 -Board esp32-s3-audio-box -Release"),
+    ("BLOCK", "tools\\ota-deliver.ps1 -DeviceId d1 -Version v1"),
+    ("BLOCK", ".\\ota-push.ps1 -Board esp32-s3-audio-box"),
+    # (vi) 6c NEGATIVE CONTROLS -- the CORRECT shape for each wrapper must be silent, or the rule
+    #      blocks the very thing it recommends (rule 4b shipped exactly that bug once).
+    ("ALLOW", '& "C:/x/iotta-firmware/tools/ota-deliver.ps1" -DeviceId d1 -Version v1'),
+    ("ALLOW", '& "C:/x/iotta-firmware/tools/ota-push.ps1" -Board esp32-s3-audio-box -Release'),
+    ("ALLOW", "& D:\\repos\\iotta-firmware\\tools\\ota-push.ps1 -Board esp32-s3-audio-box"),
+    # ...and READING the script -- what you do before invoking it -- is not invoking it.
+    ("ALLOW", "cat tools/ota-deliver.ps1"),
+    ("ALLOW", "grep -n DeviceId tools/ota-deliver.ps1"),
+    ("ALLOW", "sed -n '1,40p' tools/ota-push.ps1"),
 ]
 
 fails = 0
