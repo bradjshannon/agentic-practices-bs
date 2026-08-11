@@ -13,7 +13,7 @@ agent answered with a bold lead --
     Scope caveat: that capture is one agent on one date ... I haven't verified that this run.
 
 The claim rested on ONE repo document and no live check. It was wrong: the next message, after
-one SSH session, inverted it. Brad's response was the sharpest question of the session --
+one SSH session, inverted it. The operator's response was the sharpest question of the session --
 *"Why should I believe you, when you confidently correct things you confidently just said?"*
 
 THE DEFECT IS NOT THE ERROR. It is that **the uncertainty was present and demoted.** The agent
@@ -226,7 +226,7 @@ def main() -> int:
         f"  caveats:          {facts['hedges']}, first one at {pct}% through the message\n\n"
         "On 2026-08-11 the fan-tools answer led with **\"Yes -- fundamentally different, and "
         "the fan's are prose\"** and closed with \"I haven't verified that this run\". The claim "
-        "rested on one document and no live check, and one SSH session inverted it. Brad: "
+        "rested on one document and no live check, and one SSH session inverted it. The operator: "
         "\"Why should I believe you, when you confidently correct things you confidently just "
         "said?\"\n\n"
         "The error is not the defect -- the DEMOTION is. The disqualifying sentence was already "

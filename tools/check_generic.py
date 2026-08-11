@@ -83,8 +83,36 @@ _EXEMPTIONS: list[tuple[str, str | None, str]] = [
     # 3. A DETECTOR PATTERN. `check_sanitized.py` matches the operator's home-directory path to
     #    reject it; editing the pattern disables the mechanism. The name here is the thing being
     #    caught, not a thing being said.
+    #
+    # ⚠️ THE ROW BELOW WENT STALE THE MOMENT THE PATTERN IT PROTECTS WAS FIXED (found 2026-08-11).
+    #    It is keyed on the literal `C:\\Users\\brads`. On 2026-08-11 that pattern was widened to
+    #    `brads?` to cover BOTH workstations -- so the exemption stopped matching its own subject,
+    #    silently, and the line it exists to excuse became a finding again. Kept rather than
+    #    rewritten, because it still covers nothing else and deleting it would hide that this
+    #    happened. THE GENERAL HAZARD: an exemption keyed on a literal is coupled to the exact
+    #    text of the thing it exempts, so improving that thing breaks its own excuse. Prefer
+    #    keying on the narrowest STABLE fragment, and expect to revisit these whenever the
+    #    detector changes.
     ("tools/check_sanitized.py", r"C:\\Users\\brads",
      "detector pattern -- editing it disables check_sanitized.py"),
+    ("tools/check_sanitized.py", r"C:[\\/]Users[\\/]brads?[\\/]",
+     "detector pattern (widened 2026-08-11 to cover both workstations) -- "
+     "editing it disables check_sanitized.py"),
+    # 3b. The COMMENT that explains why the pattern above reads as it does, and the TEST that
+    #     proves it fires in both directions. Both must state the two concrete paths: the comment
+    #     is the record of a check that could not fail, and the test asserts on the literal input
+    #     the detector must match. Genericize either and you get, respectively, an unexplained
+    #     regex and a test that no longer tests anything -- the second being precisely the
+    #     vacuous-pass this repo keeps finding in its own instruments.
+    ("tools/check_sanitized.py", "two real operator home paths sat in",
+     "records the concrete paths that a broken detector missed -- the specifics ARE the finding"),
+    #     Keyed on fragments, NOT on the whole file. A file-level exemption here would be the
+    #     hazard named above in its worst form: every future line in the detector's own test
+    #     would become invisible, including one that genuinely leaks.
+    ("tools/check_sanitized_test.py", "operator-path",
+     "detector test -- literal input the pattern must match, and the docstring naming the gap"),
+    ("tools/check_sanitized_test.py", "workstation's username",
+     "docstring recording which username the broken pattern matched instead"),
     # 4. TEXT INSIDE A VERBATIM QUOTE. Changing an attribution is honest; changing the words
     #    inside the quotation marks is falsifying a quote, which is worse than the name.
     ("lessons/commit-authorship-is-not-evidence-a-human-acted.md", "That's Brad himself",
