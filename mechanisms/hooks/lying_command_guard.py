@@ -273,6 +273,105 @@ def check(cmd: str, run_in_background: bool = False):
             "append `# guard:ok`.",
         ))
 
+    # ── 6. THE OTA DELIVERY PATH: two wrappers are the only correct way in ────────────────────
+    # THE REQUIREMENT, before the mechanism: delivering firmware to a device has two failure
+    # modes that both report success. (a) Registering an image under a version string that is not
+    # the one the image's own `esp_app_desc_t` reports: the server then re-offers it forever and
+    # the device reboots on every offer -- a ~90 s loop that reads as a firmware defect and was
+    # once diagnosed as one, with a fix shipped for the wrong cause. (b) Trusting a push CLI's
+    # exit code: `firmware-push` exits 0 for a push the device never took.
+    #
+    # Both are already solved, by construction, in two wrappers -- and only there:
+    #   * ota-push.ps1 (build -> register -> optionally release) HAS NO `-Version` PARAMETER at
+    #     all. The store key is read out of the built image, so (a) is not expressible.
+    #   * ota-deliver.ps1 (deliver one released image to one device) resolves the board from the
+    #     device's own record, refuses a version not registered for that board, and then POLLS
+    #     THE DEVICE until it reports the new build, exiting nonzero if it never does -- so (b)
+    #     cannot pass silently.
+    #
+    # Removing the raw primitives from the settings allow-list was done first, and it is not
+    # enough: an allow-list decides whether something PROMPTS, not whether an agent reaches for
+    # it. And a brief saying "use the wrapper" is Voluntary class -- it works only on an agent
+    # that read it and is not busy. This is the Guard-at-the-action form, which works on an agent
+    # that has never heard of either script.
+    #
+    # NOT BLOCKED, DELIBERATELY: `firmware-rollback` and `firmware-list`. Rollback is the
+    # emergency valve -- putting a guard in front of the thing you reach for when a bad image is
+    # already on a device is how you end up unable to undo it. `firmware-list` is read-only. The
+    # patterns below name the three mutating subcommands explicitly rather than matching
+    # `firmware`, which would fire on both of those, on every grep, and on every commit message.
+    #
+    # SURFACE: heredoc bodies removed, quoted spans KEPT. That is the opposite of most rules here
+    # and it is required in both directions -- a script path and a URL are legitimately quoted
+    # (`-File "./tools/ota-deliver.ps1"`, `-Uri "http://.../release"`), so stripping quotes would
+    # make the exact commands this rule exists to catch invisible; while a heredoc body is where
+    # prose about these commands actually lives (this estate commits through commit_verify.py,
+    # whose message arrives on stdin as a heredoc). The remaining prose exposure is a quoted
+    # `git commit -m "...ota-deliver..."`, which the raw-git-commit rule below blocks anyway.
+    _ota_visible = HEREDOC.sub(" ", raw)
+
+    # 6a. The raw CLI primitives, in any shell and behind any `wsl`/`docker exec` prefix.
+    #     Anchored at a shell-segment start (with an optional launcher prefix) rather than matched
+    #     anywhere, so `grep -rn "iotta-devices firmware-push" tools/` -- where the words are an
+    #     ARGUMENT, not the verb -- does not fire. Same discriminator as `_PYTEST_INVOCATION`.
+    if _OTA_CLI.search(_ota_visible):
+        problems.append((
+            "`iotta-devices firmware-push` / `firmware-release` / `firmware-add` invoked "
+            "directly. These are the primitives, not the interface: called by hand they accept a "
+            "version string that no image ever reported (the ~90 s reboot-loop incident, "
+            "misdiagnosed once as a firmware defect) and they report success from an exit code "
+            "rather than from the device.",
+            "To DELIVER an already-released image to one device:\n"
+            "      & \"<repo>\\tools\\ota-deliver.ps1\" -DeviceId <device-id> -Version <version>\n"
+            "    It resolves the board from the device's own record, refuses a version not "
+            "registered for that board, and polls the DEVICE until it reports the new build.\n"
+            "    To BUILD/REGISTER/RELEASE an image:\n"
+            "      & \"<repo>\\tools\\ota-push.ps1\" -Board <board> [-Release]\n"
+            "    It has no -Version parameter -- the store key is read out of the built image.\n"
+            "    `firmware-rollback` and `firmware-list` are NOT blocked; use them freely.",
+        ))
+
+    # 6b. The same two operations reached over HTTP instead. The CLIENT is looked for in `cmd`
+    #     (shell syntax, and `python -c "...requests..."` is already unwrapped by NESTED) while
+    #     the ROUTE is looked for in the quoted-preserving surface, because a URL is data. Both
+    #     are required: a docs edit that names the route without calling anything must not fire.
+    #     `/admin/firmware/{board}` (list) and `/admin/firmware/{board}/rollback` are excluded by
+    #     construction -- see `_OTA_ROUTE`.
+    if _HTTP_CLIENT.search(cmd) and _OTA_ROUTE.search(_ota_visible):
+        problems.append((
+            "A direct HTTP call to a firmware push/release admin route. The route is the same "
+            "primitive as the CLI with one less guard: nothing resolves the board from the "
+            "device, nothing checks the version was ever registered for it, and a 200 means the "
+            "server accepted the request -- not that the device took the image.",
+            "Use the wrappers, which are the only path that verifies the effect:\n"
+            "      & \"<repo>\\tools\\ota-deliver.ps1\" -DeviceId <device-id> -Version <version>"
+            "   (deliver to one device)\n"
+            "      & \"<repo>\\tools\\ota-push.ps1\" -Board <board> [-Release]"
+            "   (build/register/release)\n"
+            "    Read-only firmware GETs and the rollback route are not blocked.",
+        ))
+
+    # 6c. THE RIGHT SCRIPT IN THE WRONG SHAPE -- cost a whole lot on 2026-08-10. An agent ran
+    #     `pwsh -NoProfile -File "./tools/ota-deliver.ps1"`, which is the correct script and was
+    #     still refused: a relative path and `-File` match no permission rule, so the call never
+    #     ran and the failure looked like the script's fault rather than the invocation's.
+    #     Two shapes fire: any `-File` form, and a RELATIVE path in command position. A bare
+    #     mention of the basename does NOT fire (`grep -n ota-deliver.ps1 README.md`,
+    #     `cat tools/ota-deliver.ps1`) -- prose and reads are where a guard like this would
+    #     otherwise cry wolf, and reading the script is exactly what you do before invoking it.
+    if _OTA_WRAPPER_FILE.search(_ota_visible) or _OTA_WRAPPER_RELATIVE.search(_ota_visible):
+        problems.append((
+            "`ota-deliver.ps1`/`ota-push.ps1` invoked by a RELATIVE path or via `pwsh -File`. "
+            "This is the right script in a shape no permission rule can match, so the call is "
+            "refused before it runs -- and the refusal reads like the script failing.",
+            "Invoke it by ABSOLUTE path with the call operator, which is the shape the "
+            "permission rule matches:\n"
+            "      & \"<repo>\\tools\\ota-deliver.ps1\" -DeviceId <device-id> -Version <version>\n"
+            "      & \"<repo>\\tools\\ota-push.ps1\" -Board <board> [-Release]\n"
+            "    Not `-File`, not `./tools/...` -- the leading `&` and the absolute path are both "
+            "load-bearing.",
+        ))
+
     # N. Counting CR bytes through a Git Bash pipe. MSYS applies text-mode translation on the
     #    way through, so the count is fabricated -- in BOTH directions. Observed 2026-07-26,
     #    twice in one investigation: `grep -c $'\r'` reported clean LF blobs as "225 CRLF lines"
@@ -648,6 +747,65 @@ def _slow_foreground_shape(text: str):
     if _IDF_SLOW.search(text):
         return "`idf.py build`/`flash`/`monitor`"
     return None
+
+
+# ── Rule 6: the OTA delivery path ─────────────────────────────────────────────────────────────
+# Written against BASENAMES and invocation SHAPES, never against an absolute path on any one
+# machine: this file is mirrored cross-machine and its banked copy lives in a public repo. A
+# basename match is also the more robust one -- it survives a clone living somewhere else.
+#
+# The three MUTATING subcommands, named individually. `firmware-rollback` (the emergency valve)
+# and `firmware-list` (read-only) are absent from this alternation ON PURPOSE and must stay
+# absent; matching the bare word `firmware` would swallow both.
+#
+# The leading anchor is what separates the verb from the noun: a shell-segment start, optionally
+# preceded by env assignments and by a launcher that carries the real command (`wsl -e bash -lc
+# "docker exec … iotta-devices firmware-push …"` is one segment, and the quoted payload is
+# deliberately still visible on this rule's surface). Without the anchor,
+# `grep -rn "iotta-devices firmware-push" tools/` fires -- the same false positive
+# `_PYTEST_INVOCATION` was narrowed to avoid.
+_OTA_CLI = re.compile(
+    r"(?:^|[;&|\n]|&&|\|\|)\s*(?:\w+=\S+\s+)*"
+    r"(?:(?:wsl|docker|sudo|pwsh|powershell|bash|sh)\b[^;&|\n]*?\s)?"
+    r"iotta-devices\b[^;&|\n]*?\bfirmware-(?:push|release|add)\b",
+    re.I | re.M,
+)
+
+# An HTTP client in COMMAND position (looked for in the quote-stripped `cmd`, where a client name
+# appearing inside a URL or a docs string has already been removed). Paired with `_OTA_ROUTE`
+# below; neither fires alone, so naming a route in prose costs nothing.
+_HTTP_CLIENT = re.compile(
+    r"\b(?:curl|wget|Invoke-RestMethod|Invoke-WebRequest|iwr|irm|httpx|requests)\b", re.I)
+
+# The two mutating firmware surfaces, and only those:
+#   POST /admin/devices/{id}/firmware-push
+#   POST /admin/firmware/{board}/{version}[/release]
+# Excluded BY CONSTRUCTION rather than by a blocklist, so a new read route cannot silently become
+# a false positive:
+#   * `/admin/firmware/{board}` -- the list. Needs two segments to match; one is not enough.
+#   * `/admin/firmware/{board}/rollback` -- the emergency valve, killed by the lookahead.
+#   * `/admin/firmware/{board}/{version}/elf` -- a debug artifact, not a release. The trailing
+#     `(?![\w/-])` fails on the `/` before `elf` and every backtrack fails with it.
+_OTA_ROUTE = re.compile(
+    r"/admin/devices/[^/\s'\"]+/firmware-push"
+    r"|/admin/firmware/[^/\s'\"]+/(?!rollback(?![\w-]))[^/\s'\"]+(?:/release)?(?![\w/-])",
+    re.I,
+)
+
+# The right script, the wrong shape. `-File` is wrong at any path (the permission rule matches a
+# `&`-invocation, not a `-File` one), so that form needs no absoluteness test.
+_OTA_WRAPPER_FILE = re.compile(
+    r"-File\s+['\"]?[^\s'\";|&]*ota-(?:deliver|push)\.ps1", re.I)
+# A RELATIVE path in command position. The lookbehind on `tools` is what keeps an ABSOLUTE path
+# that happens to contain a `tools/` component (`C:/…/iotta-firmware/tools/ota-deliver.ps1`) from
+# reading as relative -- the character before `tools` is a separator there, and only a bare
+# `tools/` at the start of the path is the relative form. Requiring command position is what
+# keeps `cat tools/ota-deliver.ps1` and a quoted prose mention silent.
+_OTA_WRAPPER_RELATIVE = re.compile(
+    r"(?:^|[;&|\n]|&&|\|\|)\s*&?\s*"
+    r"(?:\.{1,2}[\\/]|(?<![\w/\\:.-])tools[\\/])[^\s'\";|&]*ota-(?:deliver|push)\.ps1",
+    re.I | re.M,
+)
 
 
 # The status-page data files and the ONE sanctioned writer for each: (filename, tool, example).
