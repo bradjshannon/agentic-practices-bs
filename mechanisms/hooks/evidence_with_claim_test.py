@@ -87,7 +87,7 @@ check(
 
 check(
     "no load-bearing claim at all",
-    evaluate("Flashed NIMBE and started the build; I'll check telemetry next.",
+    evaluate("Flashed VAMPS and started the build; I'll check telemetry next.",
              "idf.py build\n...", calls=4)[0],
     False,
 )
@@ -101,7 +101,7 @@ check(
 
 check(
     "'unverified' must not trip the verification pattern",
-    evaluate("DURIN's AFE path is unverified; COM7 was never connected this run.",
+    evaluate("KEDMA's AFE path is unverified; COM7 was never connected this run.",
              "some tool output", calls=1)[0],
     False,
 )
