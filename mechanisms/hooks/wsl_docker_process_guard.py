@@ -3,13 +3,13 @@
 
 WHY THIS HOOK EXISTS
 ---------------------
-2026-08-04: a conductor session needed to restart the iotta dev server on `:8000` to pick up a
+2026-08-04: a conductor session needed to restart the myproject dev server on `:8000` to pick up a
 code change, assumed it was a native Windows process, and burned several tool calls -- `tasklist`,
 `wmic process where "ProcessId=X" get CommandLine`, PowerShell `Get-CimInstance Win32_Process
 -Filter "ProcessId = X"` -- before finding nothing useful. `:8000` is not a Windows process at
-all: it is served by a Docker container built from a SEPARATE WSL clone (`~/iotta-bs` inside WSL,
+all: it is served by a Docker container built from a SEPARATE WSL clone (`~/myproject-server` inside WSL,
 not the Windows checkout this agent was sitting in), documented as a "STANDING GOTCHA" in
-`conductor-bs/conductors/iotta/decisions.md` and in `iotta-setup/RUNBOOK.md`'s "CI/CD -- the
+`conductor-bs/conductors/myproject/decisions.md` and in `myproject-setup/RUNBOOK.md`'s "CI/CD -- the
 deploy button" section. Both docs already said this in prose. The prose did not prevent the
 mistake -- a session can start without ever reading either file, and a plausible-looking dead end
 (no matching process) reads as "must search harder," not "wrong premise." That is the
@@ -18,8 +18,8 @@ agent *writes* is satisfiable without the check ever happening.
 
 WHAT IT DOES
 ------------
-Blocks a command that hunts a Windows PID/process tied to the iotta dev/stable ports (8000, 8001)
-or explicitly names iotta -- via `tasklist`, `wmic process`, `Get-CimInstance Win32_Process`,
+Blocks a command that hunts a Windows PID/process tied to the myproject dev/stable ports (8000, 8001)
+or explicitly names myproject -- via `tasklist`, `wmic process`, `Get-CimInstance Win32_Process`,
 `Get-Process` filtered by PID/name, or a `netstat` port lookup meant to feed a later `taskkill` --
 and points at the actual restart mechanism instead:
 
@@ -29,10 +29,10 @@ and points at the actual restart mechanism instead:
 SCOPE DISCIPLINE
 -----------------
 `tasklist` / `Get-Process` / `wmic process` / `netstat` are ordinary, frequently-legitimate
-Windows admin commands for purposes that have nothing to do with iotta. Firing on them
+Windows admin commands for purposes that have nothing to do with myproject. Firing on them
 unconditionally would cry wolf constantly and get the guard disabled, taking its true positive
 with it. So this only fires when a process/PID-hunt shape co-occurs, IN THE SAME COMMAND, with a
-signal that ties it to the iotta server: the literal port 8000 or 8001, or the word "iotta". A
+signal that ties it to the myproject server: the literal port 8000 or 8001, or the word "myproject". A
 `netstat -ano | findstr :8000` already carries that signal by itself -- it is the realistic first
 step of the hunt, and blocking it there stops the chain before a PID even exists to feed the next
 command.
@@ -49,32 +49,32 @@ OVERRIDE = re.compile(r"#\s*guard:\s*ok\b", re.I)
 
 # Ports RUNBOOK.md documents as fixed/well-known: dev (:8000) and stable/prod (:8001). Named
 # scratch instances (provision-instance.sh) get arbitrary ports chosen at creation time and can't
-# be enumerated here -- those are covered by the "iotta" keyword instead, since a command hunting
+# be enumerated here -- those are covered by the "myproject" keyword instead, since a command hunting
 # one is very likely to name the instance or the project somewhere in the same line.
 _KNOWN_PORTS = ("8000", "8001")
 
-# A command is "tied to iotta's WSL/Docker ports" if it mentions one of the known ports as a
-# port-shaped token (not just any occurrence of the digits) or names iotta outright.
+# A command is "tied to myproject's WSL/Docker ports" if it mentions one of the known ports as a
+# port-shaped token (not just any occurrence of the digits) or names myproject outright.
 _PORT_RE = re.compile(r"(?<![\d.])(?:" + "|".join(_KNOWN_PORTS) + r")(?![\d])")
-_IOTTA_RE = re.compile(r"\biotta\b", re.I)
+_MYPROJECT_RE = re.compile(r"\bmyproject\b", re.I)
 
 
 def _has_context(text: str) -> bool:
-    return bool(_PORT_RE.search(text) or _IOTTA_RE.search(text))
+    return bool(_PORT_RE.search(text) or _MYPROJECT_RE.search(text))
 
 
 # ── THE TWO NARROWINGS ADDED 2026-08-09, after this guard blocked three unrelated commands ──
 #
-# It fired on a session doing conductor work that had nothing to do with the iotta server:
+# It fired on a session doing conductor work that had nothing to do with the myproject server:
 #
 #   1. `grep -n "netstat\|8000\|8001..." wsl_docker_process_guard.py`  -- reading THIS FILE's own
 #      source. The verbs and the ports were inside a grep PATTERN, i.e. data. This is the prose
 #      trap lying_command_guard.py's rule 5 documents ("a guard that punishes writing about its
 #      own patterns is one that gets disabled"), arriving here.
 #   2. A multi-line block whose FIRST line set `SCRATCH=".../C--Users-<user>-Documents-GitHub-
-#      iotta-bs/.../newuser"` and whose LATER line ran `netstat ... | grep :8917`. The context
-#      signal came from a session scratchpad PATH on a different line -- `\biotta\b` matches
-#      `iotta-bs` because `-` is a word boundary. In THIS project every scratch path contains
+#      myproject-server/.../newuser"` and whose LATER line ran `netstat ... | grep :8917`. The context
+#      signal came from a session scratchpad PATH on a different line -- `\bmyproject\b` matches
+#      `myproject-server` because `-` is a word boundary. In THIS project every scratch path contains
 #      the project name, so that is a permanent false-positive source, not a one-off.
 #   3. The same block's `taskkill` on port 8917, blocked for the same reason.
 #
@@ -89,7 +89,7 @@ def _has_context(text: str) -> bool:
 # (b) Look for the VERB in quote-stripped text, but for the CONTEXT in the raw segment. The
 #     asymmetry is the point and is load-bearing in both directions:
 #       * verb stripped  -> `grep -n "netstat..."` has no verb outside quotes, so #1 goes quiet.
-#       * context raw    -> `findstr ":8000"` and `"CommandLine like '%iotta%'"` keep their
+#       * context raw    -> `findstr ":8000"` and `"CommandLine like '%myproject%'"` keep their
 #                           signal, which lives INSIDE quotes in several real true positives.
 #     A blanket shell_only() over both would have silently killed those.
 # (c) STRIP HEREDOC BODIES FIRST. Found immediately after (a) and (b) shipped, by this guard
@@ -147,20 +147,20 @@ def check(cmd: str):
         return []
 
     return [(
-        f"This looks like it's hunting a Windows process/PID for iotta's dev (`:8000`) or "
+        f"This looks like it's hunting a Windows process/PID for myproject's dev (`:8000`) or "
         f"stable (`:8001`) port (matched `{hit}`). Those ports are not native Windows "
         f"processes -- they're served by Docker containers built from a SEPARATE WSL clone "
-        f"(`~/iotta-bs` inside WSL, not this Windows checkout). A Windows-side process/PID "
+        f"(`~/myproject-server` inside WSL, not this Windows checkout). A Windows-side process/PID "
         f"search will find nothing, and the empty result reads as 'search harder' instead of "
-        f"'wrong premise.' See `conductor-bs/conductors/iotta/decisions.md`'s 2026-08-03 "
-        f"\"STANDING GOTCHA\" entry and `iotta-setup/RUNBOOK.md`'s \"CI/CD -- the deploy "
+        f"'wrong premise.' See `conductor-bs/conductors/myproject/decisions.md`'s 2026-08-03 "
+        f"\"STANDING GOTCHA\" entry and `myproject-setup/RUNBOOK.md`'s \"CI/CD -- the deploy "
         f"button\" section.",
         "To pick up a code change, deploy instead of restarting a process:\n"
         "      gh workflow run deploy.yml -f ref=<branch> -f target=dev     # dev = port 8000\n"
         "      gh workflow run deploy.yml -f ref=<branch> -f target=stable  # stable = port 8001\n"
         "      gh run watch                                                 # or: gh run view --log\n"
         "    To inspect the running container directly instead: "
-        "`wsl -d Ubuntu-24.04 -- bash -lc \"cd ~/iotta-bs && docker compose ps\"` / "
+        "`wsl -d Ubuntu-24.04 -- bash -lc \"cd ~/myproject-server && docker compose ps\"` / "
         "`docker compose logs -f`.",
     )]
 

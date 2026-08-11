@@ -1,6 +1,6 @@
 # A tolerant batch policy becomes a lying ack when you put a per-record protocol on top
 
-**2026-07-31, iotta.** A streaming ingest endpoint answered `{"ok": true}` for records it had
+**2026-07-31.** A streaming ingest endpoint answered `{"ok": true}` for records it had
 silently thrown away.
 
 ## What happened

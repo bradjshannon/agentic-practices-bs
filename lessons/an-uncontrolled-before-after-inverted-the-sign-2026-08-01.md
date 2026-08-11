@@ -1,6 +1,6 @@
 # An uncontrolled before/after inverted the sign of the effect
 
-**2026-08-01, iotta.** Not "the number was a bit off" — the measurement said a feature *freed*
+**2026-08-01.** Not "the number was a bit off" — the measurement said a feature *freed*
 memory when it *costs* memory.
 
 ## The claim

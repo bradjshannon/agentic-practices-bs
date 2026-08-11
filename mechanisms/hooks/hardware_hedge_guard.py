@@ -25,7 +25,7 @@ each time -- the vendor datasheet, the operating history, and the bring-up recor
 
 WHY PROSE DID NOT WORK, MEASURED
 --------------------------------
-A hardware-facts register (`conductor-bs/conductors/iotta/hardware-facts.md`) was written at
+A hardware-facts register (`conductor-bs/conductors/myproject/hardware-facts.md`) was written at
 ~02:00 with exactly this rule, and named in PRIMING.md so every run indexes it. **The second
 instance happened at ~03:00, by the same agent that wrote the register.** That is the
 Voluntary-class decay this project's own enforcement table predicts, arriving inside one
@@ -216,7 +216,7 @@ def main() -> int:
         "Authority order: Notion \"Hardware Reference\" pages (search the Notion MCP) > vendor "
         "datasheet > bring-up history and observed behaviour > board BSP/Kconfig (authoritative "
         "for SOFTWARE only) > repo docs/*.md snapshots > your recollection, which is not a "
-        "source. Register: conductor-bs/conductors/iotta/hardware-facts.md\n\n"
+        "source. Register: conductor-bs/conductors/myproject/hardware-facts.md\n\n"
         "FIX: consult one of them and say \"established, per <source>\", or ASK the operator in one "
         "line. Both are cheap. If the fact genuinely needs a meter or the board is genuinely "
         "undocumented, emit `hardware:unverified-ok` -- override use is LOGGED, including "

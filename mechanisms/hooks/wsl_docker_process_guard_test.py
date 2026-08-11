@@ -17,23 +17,23 @@ cases = [
     # wmic/Get-CimInstance/taskkill call.
     ("BLOCK", "netstat -ano | findstr :8000"),
     ("BLOCK", "netstat -ano | findstr \"8000\""),
-    # tasklist hunting an iotta-named process.
-    ("BLOCK", 'tasklist | findstr /i iotta'),
+    # tasklist hunting an myproject-named process.
+    ("BLOCK", 'tasklist | findstr /i myproject'),
     # wmic process where "ProcessId=X" get CommandLine -- named directly in the incident,
-    # with iotta context carried in the same command (a comment, in this case).
-    ("BLOCK", 'wmic process where "ProcessId=24680" get CommandLine  # find the iotta 8000 process'),
+    # with myproject context carried in the same command (a comment, in this case).
+    ("BLOCK", 'wmic process where "ProcessId=24680" get CommandLine  # find the myproject 8000 process'),
     # wmic hunting by command-line content instead of a resolved PID.
-    ("BLOCK", 'wmic process where "CommandLine like \'%iotta%\'" get ProcessId,CommandLine'),
+    ("BLOCK", 'wmic process where "CommandLine like \'%myproject%\'" get ProcessId,CommandLine'),
     # PowerShell Get-CimInstance Win32_Process -Filter "ProcessId = X" -- the exact shape
     # named in the incident, with port context in the same line.
     ("BLOCK", 'Get-CimInstance Win32_Process -Filter "ProcessId = 24680" # port 8000 process'),
     # Get-Process filtered by name/port context.
-    ("BLOCK", 'Get-Process | Where-Object {$_.ProcessName -like "*iotta*"}'),
+    ("BLOCK", 'Get-Process | Where-Object {$_.ProcessName -like "*myproject*"}'),
     ("BLOCK", "Get-Process -Id 24680  # the process holding port 8001"),
     # netstat -> taskkill chain in one command.
     ("BLOCK", 'for /f "tokens=5" %a in (\'netstat -ano ^| findstr :8000\') do taskkill /PID %a /F'),
     # ── Legitimate uses that MUST NOT fire ──────────────────────────────────────────────────
-    # Same commands, no iotta/8000/8001 context at all -- ordinary Windows admin work.
+    # Same commands, no myproject/8000/8001 context at all -- ordinary Windows admin work.
     ("ALLOW", "tasklist | findstr chrome"),
     ("ALLOW", "tasklist /fi \"imagename eq node.exe\""),
     ("ALLOW", 'wmic process where "ProcessId=555" get CommandLine'),
@@ -42,12 +42,12 @@ cases = [
     ("ALLOW", "Get-Process notepad"),
     ("ALLOW", "netstat -ano | findstr :3000"),
     ("ALLOW", "taskkill /PID 555 /F"),
-    # Reading/writing about iotta with no process-hunt verb at all.
-    ("ALLOW", "grep -rn iotta docs/README.md"),
-    ("ALLOW", "cd server && python -m pytest tests/ -q  # iotta test suite"),
+    # Reading/writing about myproject with no process-hunt verb at all.
+    ("ALLOW", "grep -rn myproject docs/README.md"),
+    ("ALLOW", "cd server && python -m pytest tests/ -q  # myproject test suite"),
     # 8000/8001 mentioned but no process-hunt shape (e.g. curling the health endpoint).
     ("ALLOW", "curl http://127.0.0.1:8000/health"),
-    ("ALLOW", "curl http://127.0.0.1:8001/health  # iotta stable"),
+    ("ALLOW", "curl http://127.0.0.1:8001/health  # myproject stable"),
     # The correct restart mechanism itself must never be blocked.
     ("ALLOW", "gh workflow run deploy.yml -f ref=main -f target=dev"),
     ("ALLOW", "gh workflow run deploy.yml -f ref=main -f target=stable"),
@@ -56,7 +56,7 @@ cases = [
     ("ALLOW", "Get-Process -Id 80001"),
 
     # ── The three FALSE POSITIVES this guard produced on 2026-08-09, all in one session ──────
-    # Each blocked a command that had nothing to do with the iotta server. Kept as cases so the
+    # Each blocked a command that had nothing to do with the myproject server. Kept as cases so the
     # narrowing cannot be silently widened back; see the comment block in the guard for why the
     # verb is matched outside quotes while the context is matched raw.
     #
@@ -66,10 +66,10 @@ cases = [
     # (2)+(3) The context came from a SCRATCHPAD PATH on a DIFFERENT LINE. Every scratch path in
     #         this project contains the project name, so this is permanent, not incidental.
     ("ALLOW",
-     'SCRATCH="/c/Users/x/Temp/claude/C--Users-x-Documents-GitHub-iotta-bs/abc/scratchpad"\n'
+     'SCRATCH="/c/Users/x/Temp/claude/C--Users-x-Documents-GitHub-myproject-server/abc/scratchpad"\n'
      'netstat -ano | grep LISTENING | grep -E ":8917"'),
     ("ALLOW",
-     'SCRATCH="/tmp/claude/C--Users-x-GitHub-iotta-bs/s"\n'
+     'SCRATCH="/tmp/claude/C--Users-x-GitHub-myproject-server/s"\n'
      'PID=$(netstat -ano | grep 8917 | awk \'{print $NF}\')\n'
      'taskkill //PID "$PID" //F'),
     # THE CONTROL for (2)/(3): same shape, but the context is in the SAME segment as the verb.
@@ -77,8 +77,8 @@ cases = [
     ("BLOCK",
      'SCRATCH="/tmp/whatever"\n'
      'netstat -ano | grep LISTENING | grep -E ":8000"'),
-    # And a genuine iotta process hunt on one line still fires, quotes or not.
-    ("BLOCK", 'tasklist | findstr /i "iotta"'),
+    # And a genuine myproject process hunt on one line still fires, quotes or not.
+    ("BLOCK", 'tasklist | findstr /i "myproject"'),
 
     # (4) THE FOURTH false positive, found minutes after fixing the first three: this guard
     #     blocked the `git commit` carrying its own fix, because the message quoted the very
@@ -89,7 +89,7 @@ cases = [
      "python commit_verify.py --repo /r --path guard.py <<'MSG'\n"
      "fix(guard): narrow the guard that cried wolf\n"
      "Splitting on `|` would separate `netstat -ano` from `findstr :8000` and kill\n"
-     "the canonical true positive on iotta's port 8000.\n"
+     "the canonical true positive on myproject's port 8000.\n"
      "MSG"),
     # CONTROL: a real hunt AFTER a heredoc ends must still fire -- stripping the body must not
     # become "anything in a command containing a heredoc is exempt".

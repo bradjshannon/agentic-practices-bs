@@ -34,11 +34,11 @@ SEEN = Path.home() / ".claude" / ".pacer-announced"
 # the natural place to also surface new inbox entries: no new wake-up mechanism needed, just
 # piggyback on the one that exists.
 #
-# Same inbox pending_instructions.py reads at turn 0 -- hardcoded to the iotta conductor's inbox
+# Same inbox pending_instructions.py reads at turn 0 -- hardcoded to the myproject conductor's inbox
 # to match that hook, not parameterized over CONDUCTOR_ROOTS (which also covers conductor-bs and
-# iotta-firmware): there is exactly one status-page inbox today and generalizing it before a
+# myproject-firmware): there is exactly one status-page inbox today and generalizing it before a
 # second one exists would be speculative.
-INBOX = Path.home() / "Documents" / "GitHub" / "conductor-bs" / "conductors" / "iotta" / "inbox.jsonl"
+INBOX = Path.home() / "Documents" / "GitHub" / "conductor-bs" / "conductors" / "myproject" / "inbox.jsonl"
 # Dedup state for the inbox surfacing below -- separate from SEEN (which dedups the heartbeat
 # line itself by fires_at). Keyed per-entry (see _entry_key), not per-fire, so an entry surfaced
 # once stays surfaced across every later pacer fire even though fires_at keeps changing.
@@ -60,8 +60,8 @@ DEFAULT_LINK = "https://conductor-status.invalid:9443/"
 _HOME = os.path.expanduser("~")
 CONDUCTOR_ROOTS = [
     os.path.join(_HOME, "Documents", "GitHub", "conductor-bs"),
-    os.path.join(_HOME, "Documents", "GitHub", "iotta-bs"),
-    os.path.join(_HOME, "Documents", "GitHub", "iotta-firmware"),
+    os.path.join(_HOME, "Documents", "GitHub", "myproject-server"),
+    os.path.join(_HOME, "Documents", "GitHub", "myproject-firmware"),
 ]
 
 

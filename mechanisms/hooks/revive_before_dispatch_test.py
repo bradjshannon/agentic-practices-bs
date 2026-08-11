@@ -75,8 +75,8 @@ def is_deny(stdout: str) -> bool:
 
 def test_positive_control_guard_can_actually_block(tmp_path):
     """MUST come first in spirit: prove the guard fires at all, or no negative test means anything."""
-    run_hook(post("s1", "iotta-server", "a1234567890abcd"), tmp_path)
-    code, out = run_hook(pre("s1", "iotta-server"), tmp_path)
+    run_hook(post("s1", "myproject-server", "a1234567890abcd"), tmp_path)
+    code, out = run_hook(pre("s1", "myproject-server"), tmp_path)
     assert is_deny(out), f"guard did not block a same-type re-dispatch; stdout={out!r}"
     assert code == 0, "a hook must exit 0 even when denying"
 
@@ -84,27 +84,27 @@ def test_positive_control_guard_can_actually_block(tmp_path):
 # --------------------------------------------------------------------------- must NOT block
 
 def test_first_dispatch_of_a_type_is_allowed(tmp_path):
-    _, out = run_hook(pre("s1", "iotta-server"), tmp_path)
+    _, out = run_hook(pre("s1", "myproject-server"), tmp_path)
     assert not is_deny(out)
 
 
 def test_different_subagent_type_is_allowed(tmp_path):
-    run_hook(post("s1", "iotta-server", "a1234567890abcd"), tmp_path)
-    _, out = run_hook(pre("s1", "iotta-firmware"), tmp_path)
+    run_hook(post("s1", "myproject-server", "a1234567890abcd"), tmp_path)
+    _, out = run_hook(pre("s1", "myproject-firmware"), tmp_path)
     assert not is_deny(out)
 
 
 def test_other_session_does_not_block(tmp_path):
     """Cross-session revival is impossible, so a prior session must never produce a block."""
-    run_hook(post("s1", "iotta-server", "a1234567890abcd"), tmp_path)
-    _, out = run_hook(pre("s2", "iotta-server"), tmp_path)
+    run_hook(post("s1", "myproject-server", "a1234567890abcd"), tmp_path)
+    _, out = run_hook(pre("s2", "myproject-server"), tmp_path)
     assert not is_deny(out)
 
 
 def test_escape_hatch_allows_and_is_logged(tmp_path):
-    run_hook(post("s1", "iotta-scout", "a1234567890abcd"), tmp_path)
+    run_hook(post("s1", "myproject-scout", "a1234567890abcd"), tmp_path)
     _, out = run_hook(
-        pre("s1", "iotta-scout", "cold-required: adversarial verify must not be contaminated"),
+        pre("s1", "myproject-scout", "cold-required: adversarial verify must not be contaminated"),
         tmp_path,
     )
     assert not is_deny(out)
@@ -133,7 +133,7 @@ def test_fails_open_on_garbage_payload(tmp_path):
 def test_block_names_the_exact_replacement():
     """A block that only says 'don't' makes the agent guess — this project's own rule."""
     prior = [{"agentId": "a1234567890abcd", "description": "decode coredumps", "at": "2026-08-01T12:00:00"}]
-    reason = mod.block_reason("iotta-firmware", prior)
+    reason = mod.block_reason("myproject-firmware", prior)
     assert "SendMessage" in reason
     assert "a1234567890abcd" in reason
     assert "cold-required:" in reason, "the escape hatch must be discoverable from the block itself"
@@ -145,7 +145,7 @@ def test_block_lists_earlier_agents_too():
         {"agentId": "a1111111111111a", "description": "first", "at": "2026-08-01T12:00:00"},
         {"agentId": "a2222222222222b", "description": "second", "at": "2026-08-01T12:30:00"},
     ]
-    reason = mod.block_reason("iotta-server", prior)
+    reason = mod.block_reason("myproject-server", prior)
     assert "a2222222222222b" in reason, "the newest must be the one offered"
     assert "a1111111111111a" in reason, "earlier agents must still be visible"
 
@@ -163,7 +163,7 @@ def test_agent_id_absent_is_none_not_a_crash():
 
 
 def test_duplicate_post_does_not_double_record(tmp_path):
-    run_hook(post("s1", "iotta-sdk", "a1234567890abcd"), tmp_path)
-    run_hook(post("s1", "iotta-sdk", "a1234567890abcd"), tmp_path)
+    run_hook(post("s1", "myproject-sdk", "a1234567890abcd"), tmp_path)
+    run_hook(post("s1", "myproject-sdk", "a1234567890abcd"), tmp_path)
     state = json.loads((tmp_path / "agent-registry-s1.json").read_text(encoding="utf-8"))
-    assert len(state["iotta-sdk"]) == 1
+    assert len(state["myproject-sdk"]) == 1

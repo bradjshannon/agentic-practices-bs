@@ -1,6 +1,6 @@
 # A mirror that rewrites the bytes it mirrors deleted a whole agent type, silently
 
-**2026-08-01, iotta.** A sync tool copied a file from a repo onto the machine. Same content, same
+**2026-08-01.** A sync tool copied a file from a repo onto the machine. Same content, same
 size, no error. The agent type defined by that file **stopped existing** — it vanished from the
 harness roster with no message anywhere.
 
@@ -16,7 +16,7 @@ dst.write_text(text, encoding="utf-8")
 Python's default text mode **translates `\n` to `os.linesep` on write**. On Windows that is `\r\n`.
 So every mirrored file was silently rewritten with CRLF endings.
 
-`iotta-oracle.md` came back CRLF while every sibling agent definition was LF. The harness's
+`myproject-oracle.md` came back CRLF while every sibling agent definition was LF. The harness's
 frontmatter parser stopped recognising it, and the agent type disappeared from the available list.
 Nothing said so — no parse error, no warning, no log line. It was noticed only because a
 system notice mentioned the type was no longer available.

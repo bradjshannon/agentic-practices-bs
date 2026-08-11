@@ -1,6 +1,6 @@
 # A symptom that resolves does not confirm the hypothesis — check whether the fix falsified it
 
-**2026-08-02, iotta.** I diagnosed a board's failure-to-connect, prescribed an action, the action
+**2026-08-02.** I diagnosed a board's failure-to-connect, prescribed an action, the action
 worked, and my diagnosis was wrong. The two facts are compatible, and nearly got recorded as
 agreement.
 

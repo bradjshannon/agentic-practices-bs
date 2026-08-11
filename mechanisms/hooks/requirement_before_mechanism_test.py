@@ -33,12 +33,12 @@ def run(assistant_text, edits, stop_active=False):
 cases = [
     # (expected, description, assistant_text, edited_paths)
     ("BLOCK", "source edit, no requirement line",
-     "I changed the drain to reuse the connection.", ["C:/x/server/src/iotta/devices.py"]),
+     "I changed the drain to reuse the connection.", ["C:/x/server/src/myproject/devices.py"]),
     ("BLOCK", "firmware source edit, no requirement",
      "Fixed the stack size.", ["C:/x/main/crash_upload.cpp"]),
     ("ALLOW", "source edit WITH requirement line",
      "**Requirement:** the operator needs the decoded crash.\nSo I changed X.",
-     ["C:/x/server/src/iotta/devices.py"]),
+     ["C:/x/server/src/myproject/devices.py"]),
     ("ALLOW", "requirement without bold markers",
      "Requirement: consumers need current uptime.", ["C:/x/main/app_main.cpp"]),
     ("ALLOW", "docs-only edit", "Recorded the finding.", ["C:/x/docs/decisions.md"]),
@@ -49,7 +49,7 @@ cases = [
     ("ALLOW", "scratchpad", "Scratch script.", ["C:/tmp/scratchpad/thing.py"]),
     ("ALLOW", "no edits at all", "Just explaining something.", []),
     ("ALLOW", "explicit override", "requirement:ok — mechanical rename only.",
-     ["C:/x/server/src/iotta/devices.py"]),
+     ["C:/x/server/src/myproject/devices.py"]),
 ]
 
 fails = 0
@@ -60,7 +60,7 @@ for want, desc, text, edits in cases:
     print(f"{'ok  ' if ok else 'FAIL'} want={want:5} got={got:5}  {desc}")
 
 # loop guard
-got = run("no requirement here", ["C:/x/server/src/iotta/devices.py"], stop_active=True)
+got = run("no requirement here", ["C:/x/server/src/myproject/devices.py"], stop_active=True)
 ok = got == "ALLOW"
 fails += 0 if ok else 1
 print(f"{'ok  ' if ok else 'FAIL'} want=ALLOW got={got:5}  stop_hook_active (must not loop)")

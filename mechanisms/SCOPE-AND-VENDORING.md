@@ -184,7 +184,7 @@ one `tools/check_workstation.py` already exists to make.
 This is the catalogue's most damning example, and it turns into a worked argument for the decided
 design.
 
-`iotta-bs`'s `tools-index` pre-commit hook resolves its vendored generator through a hardcoded
+`myproject-server`'s `tools-index` pre-commit hook resolves its vendored generator through a hardcoded
 relative sibling path:
 
 ```

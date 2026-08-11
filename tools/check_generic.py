@@ -3,7 +3,7 @@
 
 WHY THIS EXISTS
 ---------------
-This repo's own convention (`conductor-bs/conductors/iotta/brief.md`, §WRITE ARTEFACTS
+This repo's own convention (`conductor-bs/conductors/myproject/brief.md`, §WRITE ARTEFACTS
 GENERICALLY) is:
 
     don't write `Brad`, or `he`/`his` referring to him -- write `the operator` / `the user` /

@@ -85,31 +85,31 @@ cases = [
     # Hand-rolled writes must BLOCK; reads and the file's OWN sanctioned tool must ALLOW.
     # pins.jsonl (the original rule, 2026-08-03):
     ("BLOCK", 'python -c "import json; f=open(r\'pins.jsonl\', \'a\'); f.write(json.dumps({}))"'),
-    ("BLOCK", "echo '{\"thread\": \"x\"}' >> conductors/iotta/pins.jsonl"),
+    ("BLOCK", "echo '{\"thread\": \"x\"}' >> conductors/myproject/pins.jsonl"),
     ("BLOCK", 'Add-Content -Path pins.jsonl -Value \'{"thread": "x"}\''),
-    ("ALLOW", "grep -n uart-satellite conductors/iotta/pins.jsonl"),
-    ("ALLOW", "cat conductors/iotta/pins.jsonl"),
+    ("ALLOW", "grep -n uart-satellite conductors/myproject/pins.jsonl"),
+    ("ALLOW", "cat conductors/myproject/pins.jsonl"),
     ("ALLOW", "python tools/pin-thread.py uart-satellite \"state text\""),
     ("ALLOW", 'python -c "import json; print(json.dumps({}))"'),  # json.dumps, no data file at all
     # review.jsonl:
     ("BLOCK", 'python -c "import json; f=open(r\'review.jsonl\', \'a\'); f.write(json.dumps({}))"'),
-    ("BLOCK", "echo '{\"id\": \"x\"}' >> conductors/iotta/review.jsonl"),
+    ("BLOCK", "echo '{\"id\": \"x\"}' >> conductors/myproject/review.jsonl"),
     ("ALLOW", "python tools/note-review.py report --id r1 \"title\" \"body\""),
-    ("ALLOW", "grep -n report- conductors/iotta/review.jsonl"),
+    ("ALLOW", "grep -n report- conductors/myproject/review.jsonl"),
     # finds.jsonl:
     ("BLOCK", 'python -c "import json; f=open(r\'finds.jsonl\', \'a\'); f.write(json.dumps({}))"'),
-    ("BLOCK", "echo '{\"resolves\": \"find-x\"}' >> conductors/iotta/finds.jsonl"),
+    ("BLOCK", "echo '{\"resolves\": \"find-x\"}' >> conductors/myproject/finds.jsonl"),
     ("BLOCK", 'Add-Content -Path finds.jsonl -Value \'{"title": "x"}\''),
     ("ALLOW", "python tools/note-find.py \"a title\" \"a tldr\""),
     ("ALLOW", "python tools/note-find.py --resolve \"some card title\" --why \"measured\""),
-    ("ALLOW", "grep -c resolves conductors/iotta/finds.jsonl"),
-    ("ALLOW", "cat conductors/iotta/finds.jsonl"),
+    ("ALLOW", "grep -c resolves conductors/myproject/finds.jsonl"),
+    ("ALLOW", "cat conductors/myproject/finds.jsonl"),
     # replies.jsonl:
     ("BLOCK", 'python -c "import json; f=open(r\'replies.jsonl\', \'a\'); f.write(json.dumps({}))"'),
-    ("BLOCK", "echo '{\"thread\": \"x\"}' >> conductors/iotta/replies.jsonl"),
+    ("BLOCK", "echo '{\"thread\": \"x\"}' >> conductors/myproject/replies.jsonl"),
     ("ALLOW", "python tools/reply.py some-thread \"an answer for the operator\""),
     ("ALLOW", "python tools/reply.py --to last \"an answer for the operator\""),
-    ("ALLOW", "wc -l conductors/iotta/replies.jsonl"),
+    ("ALLOW", "wc -l conductors/myproject/replies.jsonl"),
     # THE EXEMPTION IS PER FILE. Naming pin-thread.py must not license a raw finds.jsonl write --
     # the whole reason the rule keys the exemption to each file's own writer.
     ("BLOCK", 'python -c "import json; f=open(r\'finds.jsonl\',\'a\'); f.write(json.dumps({}))"'
@@ -117,7 +117,7 @@ cases = [
     # A READ that pretty-prints is not a write. This is the common inspection on the busiest file
     # in the set, and firing on it is how a guard gets disabled and takes its true positives along.
     ("ALLOW", 'python -c "import json; [print(json.dumps(json.loads(l))) for l in '
-              "open('conductors/iotta/finds.jsonl')]\""),
+              "open('conductors/myproject/finds.jsonl')]\""),
     # The heredoc vector: HEREDOC strips the body as prose for every other rule, so this one is
     # checked against the RAW text too. Without that, the realistic shape walks straight through.
     ("BLOCK", "python - <<'PY'\nimport json\nopen('finds.jsonl','a').write(json.dumps({}))\nPY"),
@@ -138,7 +138,7 @@ cases = [
     #     around. Both directions asserted so the boundary cannot be widened back silently.
     ("ALLOW", "python -c \"import json; open('scratch_finds.jsonl','a').write(json.dumps({}))\""),
     ("ALLOW", "python -c \"import json; open('test_replies.jsonl','a').write(json.dumps({}))\""),
-    ("BLOCK", "python -c \"import json; open('conductors/iotta/finds.jsonl','a')"
+    ("BLOCK", "python -c \"import json; open('conductors/myproject/finds.jsonl','a')"
               ".write(json.dumps({}))\""),
     # (c) A whole-file REPLACE is strictly worse than an unverified append and was undetected.
     ("BLOCK", "@{title='x'} | ConvertTo-Json -Compress | Set-Content finds.jsonl"),
@@ -156,7 +156,7 @@ cases = [
     ("BLOCK", 'bash -c "cd /tmp; cat README.md"'),
     # ── Rule N+2: a measured-slow command in the FOREGROUND (2026-08-08) ──────────────────────
     # Narrowed by a 13,527-command corpus; see
-    # conductor-bs/conductors/iotta/proposals/2026-08-08-offload-guard-measurement.md.
+    # conductor-bs/conductors/myproject/proposals/2026-08-08-offload-guard-measurement.md.
     # (i) TRUE POSITIVES -- one per guarded shape.
     ("BLOCK", "python -m pytest tools/ -q"),
     ("BLOCK", "PYTHONPATH=src python -m pytest tests/ -q 2>&1 | tail -2"),
@@ -212,22 +212,22 @@ cases = [
     #     every `docker exec` on this test host. Without it these cases would go green on 5b's
     #     verdict and would still pass with rule 6a deleted -- a positive control that proves
     #     nothing. Filtering 5b out makes BLOCK mean "6a fired", which is the actual assertion.
-    ("BLOCK", "docker exec iotta-bs-iotta-1 iotta-devices firmware-push "
+    ("BLOCK", "docker exec myproject-server-app-1 myproject-devices firmware-push "
               "esp32-s3-audio-box-84c938 20260810-2019-d644a52-d0b5c13", "is not on PATH"),
-    ("BLOCK", 'wsl -e bash -lc "docker exec iotta-bs-iotta-1 iotta-devices firmware-release '
+    ("BLOCK", 'wsl -e bash -lc "docker exec myproject-server-app-1 myproject-devices firmware-release '
               'esp32-s3-audio-box 20260810-2019-d644a52-d0b5c13"', "is not on PATH"),
-    ("BLOCK", "iotta-devices firmware-add esp32-s3-audio-box "
-              "20260810-2019-d644a52-d0b5c13 /tmp/iotta_firmware.bin"),
+    ("BLOCK", "myproject-devices firmware-add esp32-s3-audio-box "
+              "20260810-2019-d644a52-d0b5c13 /tmp/myproject_firmware.bin"),
     # (ii) 6a NEGATIVE CONTROLS. The emergency valve and the read-only listing must NEVER fire --
     #      a guard in front of rollback is how you end up unable to undo a bad push. Same rule-5b
     #      filter as above, for the same reason and in the opposite direction.
-    ("ALLOW", "docker exec iotta-bs-iotta-1 iotta-devices firmware-rollback esp32-s3-audio-box",
+    ("ALLOW", "docker exec myproject-server-app-1 myproject-devices firmware-rollback esp32-s3-audio-box",
      "is not on PATH"),
-    ("ALLOW", "docker exec iotta-bs-iotta-1 iotta-devices firmware-list esp32-s3-audio-box",
+    ("ALLOW", "docker exec myproject-server-app-1 myproject-devices firmware-list esp32-s3-audio-box",
      "is not on PATH"),
-    ("ALLOW", "iotta-devices show esp32-s3-audio-box-84c938"),
+    ("ALLOW", "myproject-devices show esp32-s3-audio-box-84c938"),
     # ...and the words as an ARGUMENT rather than the verb: the reason 6a anchors on segment start.
-    ("ALLOW", 'grep -rn "iotta-devices firmware-push" tools/'),
+    ("ALLOW", 'grep -rn "myproject-devices firmware-push" tools/'),
     # (iii) 6b -- the same operations over HTTP. Client AND route are both required.
     ("BLOCK", "curl -X POST http://localhost:8000/admin/devices/"
               "esp32-s3-audio-box-84c938/firmware-push"),
@@ -249,7 +249,7 @@ cases = [
     # because 6b additionally requires an HTTP client in command position. An earlier version of
     # this control grepped for the bare prefix `/admin/devices/`, which no route pattern matches
     # -- it would have gone green with the client requirement deleted, i.e. it tested nothing.
-    ("ALLOW", 'grep -rn "/admin/devices/{device_id}/firmware-push" server/src/iotta/main.py'),
+    ("ALLOW", 'grep -rn "/admin/devices/{device_id}/firmware-push" server/src/myproject/main.py'),
     # (v) 6c -- the right script in the wrong shape. The first is the EXACT 2026-08-10 command.
     ("BLOCK", 'pwsh -NoProfile -File "./tools/ota-deliver.ps1" -DeviceId d1 -Version v1'),
     ("BLOCK", "./tools/ota-push.ps1 -Board esp32-s3-audio-box -Release"),
@@ -257,9 +257,9 @@ cases = [
     ("BLOCK", ".\\ota-push.ps1 -Board esp32-s3-audio-box"),
     # (vi) 6c NEGATIVE CONTROLS -- the CORRECT shape for each wrapper must be silent, or the rule
     #      blocks the very thing it recommends (rule 4b shipped exactly that bug once).
-    ("ALLOW", '& "C:/x/iotta-firmware/tools/ota-deliver.ps1" -DeviceId d1 -Version v1'),
-    ("ALLOW", '& "C:/x/iotta-firmware/tools/ota-push.ps1" -Board esp32-s3-audio-box -Release'),
-    ("ALLOW", "& D:\\repos\\iotta-firmware\\tools\\ota-push.ps1 -Board esp32-s3-audio-box"),
+    ("ALLOW", '& "C:/x/myproject-firmware/tools/ota-deliver.ps1" -DeviceId d1 -Version v1'),
+    ("ALLOW", '& "C:/x/myproject-firmware/tools/ota-push.ps1" -Board esp32-s3-audio-box -Release'),
+    ("ALLOW", "& D:\\repos\\myproject-firmware\\tools\\ota-push.ps1 -Board esp32-s3-audio-box"),
     # ...and READING the script -- what you do before invoking it -- is not invoking it.
     ("ALLOW", "cat tools/ota-deliver.ps1"),
     ("ALLOW", "grep -n DeviceId tools/ota-deliver.ps1"),
@@ -308,7 +308,7 @@ class docker_present:
 DOCKER_CASES = [
     # ── docker ABSENT: the rule is live. The 2026-08-09 shape -- a pipe after a bare docker call
     #    reads a confident-looking 0 as "zero matches" when it really means "never ran".
-    (False, "BLOCK", "docker logs iotta-bs-iotta-1 | grep -c capture-stream"),
+    (False, "BLOCK", "docker logs myproject-server-app-1 | grep -c capture-stream"),
     (False, "BLOCK", "docker ps"),
     # `docker-compose` is a DIFFERENT binary, not measured against this rule -- must not fire.
     (False, "ALLOW", "docker-compose up -d"),
@@ -319,10 +319,10 @@ DOCKER_CASES = [
     # Already routed through WSL2 -- the quoted payload is DATA to this rule (matches rule 5's own
     # reasoning: `-lc` is not `-Command`/`-c` as a token, so NESTED never unwraps it, and
     # shell_only() strips the quoted span before this rule ever sees "docker").
-    (False, "ALLOW", 'wsl -e bash -lc "docker logs iotta-bs-iotta-1 | grep -c capture-stream"'),
+    (False, "ALLOW", 'wsl -e bash -lc "docker logs myproject-server-app-1 | grep -c capture-stream"'),
     # ── docker PRESENT: the rule must be silent. These are what makes the gate itself asserted
     #    instead of assumed -- without them, hardcoding the rule to always fire would still pass.
-    (True, "ALLOW", "docker logs iotta-bs-iotta-1 | grep -c capture-stream"),
+    (True, "ALLOW", "docker logs myproject-server-app-1 | grep -c capture-stream"),
     (True, "ALLOW", "docker ps"),
 ]
 

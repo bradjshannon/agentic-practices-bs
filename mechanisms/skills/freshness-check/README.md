@@ -254,7 +254,7 @@ Fixes since the copy, applied to the single junctioned file (so both paths carry
 - **2026-07-27 — `SKILL.md`, single-fence claim.** Its Registry-format section (and the front
   matter) said the parser reads *one* fenced yaml block. That was true of an earlier `re.search`
   implementation, not of the shipped `re.findall`. The same wrong claim had been copied into the
-  preambles of all three live registries (`conductor-bs`, `iotta-bs`, `iotta-firmware`); all
+  preambles of all three live registries (`conductor-bs`, `myproject-server`, `myproject-firmware`); all
   three were corrected the same day and now carry a dated note saying so.
 
 Copied 2026-07-27.

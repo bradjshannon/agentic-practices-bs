@@ -1,6 +1,6 @@
 # A staleness check keyed on a string the fix does not remove can never fail
 
-**2026-08-01, iotta.** A status card claimed a device tool ignored its arguments and rebooted
+**2026-08-01.** A status card claimed a device tool ignored its arguments and rebooted
 unconditionally. It carried an automated freshness check, and that check said **HOLDS** on the
 morning sweep. The premise had been dead for a day.
 

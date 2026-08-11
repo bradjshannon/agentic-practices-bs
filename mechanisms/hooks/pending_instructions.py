@@ -4,7 +4,7 @@
 WHY THIS IS A HOOK AND NOT A LINE IN THE BRIEF
 ----------------------------------------------
 On 2026-07-22 a conductor ran an entire session without seeing two explicit instructions the operator
-had left for it. They were not lost -- they were sitting in `iotta-firmware/docs/needs-you.md`,
+had left for it. They were not lost -- they were sitting in `myproject-firmware/docs/needs-you.md`,
 written deliberately by the previous run's handoff. The conductor read `decisions.md`,
 `TODO.md` and the cold read (the three the brief names as required) and skipped that one.
 The operator had to ask "did you do that?" for it to surface.
@@ -44,7 +44,7 @@ import os
 import sys
 
 GH = os.path.expanduser("~/Documents/GitHub")
-COND = os.path.join(GH, "conductor-bs", "conductors", "iotta")
+COND = os.path.join(GH, "conductor-bs", "conductors", "myproject")
 INBOX = os.path.join(COND, "inbox.jsonl")
 NEEDS = os.path.join(COND, "needs-you.md")
 # The page generator, loaded only for `stale_report()` -- see stale_instructions() below.
@@ -229,7 +229,7 @@ def stale_cards() -> tuple[str, str | None]:
     surface built to spend less of his attention. It was removed from the page and redirected here.
 
     HERE, and not "a line in the brief telling the conductor to check", for the same reason this
-    whole file exists: per conductors/iotta/brief.md's enforcement table, a control that requires
+    whole file exists: per conductors/myproject/brief.md's enforcement table, a control that requires
     remembering is the Voluntary class and decays. SessionStart stdout lands in context before the
     first tool call, so the run knows whether it is serving him stale cards whether or not it ever
     heard of this check.

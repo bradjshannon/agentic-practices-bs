@@ -71,6 +71,41 @@ class OperatorPathCoversBothWorkstations(unittest.TestCase):
         self.assertEqual(_flags("the operator's home directory is not named here"), set())
 
 
+class TheProjectNameThatWasMissingFromTheCatalogue(unittest.TestCase):
+    """The 2026-08-11 hole: the estate's largest project was never in the catalogue at all.
+
+    166 occurrences across 32 tracked files sat in this public repo with the job green, because
+    the docstring's rule ("never name a ... project/product") was enforced for five project
+    names and not for the sixth. These cases are what make the new pattern demonstrable rather
+    than merely present.
+    """
+
+    def test_the_bare_name_is_flagged(self):
+        self.assertIn("project", _flags("a conductor run against iotta, 2026-08-01"))
+
+    def test_the_repo_suffixed_forms_are_flagged(self):
+        for form in ("iotta-bs", "iotta-firmware", "iotta-setup", "iotta-devices"):
+            with self.subTest(form=form):
+                self.assertIn("project", _flags(f"see `{form}/tools/thing.py` for the rest"))
+
+    def test_an_underscore_form_is_flagged(self):
+        """Why the pattern carries NO word boundaries. `_` is a word character, so `\\biotta\\b`
+        returns an empty set for both of these -- and both are real forms that were in the tree:
+        a Kconfig symbol and a build artefact."""
+        self.assertIn("project", _flags("wrap the BSP entry in `if(CONFIG_IOTTA_DIAG_WEB)`"))
+        self.assertIn("project", _flags("comparing build/iotta_firmware.bin size"))
+
+    def test_case_is_ignored(self):
+        self.assertIn("project", _flags("IOTTA and Iotta are the same leak"))
+
+    def test_ordinary_prose_is_not_a_false_positive(self):
+        """NEGATIVE CONTROL. The generic replacements this sweep put in must not themselves fire,
+        or the catalogue would reject its own fix."""
+        self.assertEqual(_flags("the server repo's OTA releases are layered"), set())
+        self.assertEqual(_flags("see `myproject-firmware/tools/flash-gate.ps1`"), set())
+        self.assertEqual(_flags("a conductor run, three occurrences in one night"), set())
+
+
 class TheTableItselfIsExercised(unittest.TestCase):
     """Guards against the whole table being emptied or renamed out from under these tests."""
 

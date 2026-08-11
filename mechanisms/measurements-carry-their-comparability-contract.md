@@ -3,7 +3,7 @@
 **Mechanism:** `mechanisms/scripts/measurement_contract.py`
 **Class:** Structural — the bad state (a stored number with no comparability contract) is
 unrepresentable; `Measurement.__post_init__` refuses to construct one.
-**Origin:** iotta, 2026-08-01. Design credit: the operator.
+**Origin:** 2026-08-01. Design credit: the operator.
 
 ## The failure it prevents
 
@@ -88,7 +88,7 @@ something strong.
 
 ## Tests worth copying, not just the code
 
-`iotta-firmware/tools/test_measurement.py` — 28 checks built on the two **real** pairs above: one
+`myproject-firmware/tools/test_measurement.py` — 28 checks built on the two **real** pairs above: one
 properly controlled (must be **accepted**) and one confounded (must be **refused**). The accept
 case is load-bearing: a checker that only refuses would pass a reject-only suite by refusing
 everything.

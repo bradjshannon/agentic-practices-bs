@@ -1,6 +1,6 @@
 # Parallel agents on one working tree race the shared git index
 
-**Symptom (2026-07-27, iotta conductor, three occurrences in one night):** an agent's
+**Symptom (2026-07-27, a conductor run, three occurrences in one night):** an agent's
 carefully-staged files appear inside a *different* agent's commit, under that commit's
 unrelated message. Twice agent-to-agent; the third time the conductor itself did it with
 a `git add -A` during wind-down, sweeping a still-working agent's files into a handoff

@@ -2,7 +2,7 @@
 """Measurements that carry their own comparability contract. (portable; see mechanisms README)
 
 THE PROBLEM THIS EXISTS FOR. A bare integer looks comparable to another bare integer. Twice in
-one day on one project (iotta, 2026-08-01) two numbers were subtracted that had no business being
+one day on one project (myproject, 2026-08-01) two numbers were subtracted that had no business being
 subtracted -- the incidents are concrete but the failure is not domain-specific:
 
   - "enabling WakeNet FREED 22,640 B" -- two readings differing in wake-state AND uptime AND

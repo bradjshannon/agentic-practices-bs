@@ -4,7 +4,7 @@
 
 A component's `CMakeLists.txt` had an unconditional `idf_component_register(REQUIRES ... some_bsp
 ...)` even though only one Kconfig-gated source file in the component actually used that BSP. The
-fix looked obvious and safe: wrap the BSP entry in the same `if(CONFIG_IOTTA_DIAG_WEB)` block that
+fix looked obvious and safe: wrap the BSP entry in the same `if(CONFIG_MYPROJECT_DIAG_WEB)` block that
 already gated the source file and its embedded assets, mirroring an existing pattern in the same
 file. It built clean on the one board that was tested, was committed, and was wrong — a later
 build (a different board, same config combination) failed with a `fatal error: bsp_....h: No such

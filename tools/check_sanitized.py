@@ -25,6 +25,18 @@ USAGE
 An intentional, genuinely-generic use of a flagged token (e.g. the literal name of this check
 in its own docs) can be exempted by adding the exact line's substring to `.sanitize-allow` at
 the repo root, one literal per line. Keep that file short; every entry is a hole.
+
+THE `myproject` PLACEHOLDER
+---------------------------
+Where a project name was load-bearing as an IDENTIFIER rather than as prose -- a detector regex,
+a repo path in a hook, a test fixture that must match one -- the 2026-08-11 sweep substituted the
+placeholder family `myproject` / `myproject-server` / `myproject-firmware` / `myproject-setup` /
+`myproject-devices` rather than deleting the identifier. Deleting it would have broken the
+mechanism; leaving it would have kept the leak. The banked copy therefore differs from the
+installed copy on those lines, deliberately, and `tools/compare_mechanism_copies.py` is built for
+exactly this: *"A public copy of a mechanism is legitimately stripped of machine- and
+project-specific detail"* -- it reports DIFFERENT and refuses to guess a direction. Prose, by
+contrast, got a phrase ("the server repo", "a conductor run"), not a placeholder.
 """
 from __future__ import annotations
 
@@ -84,6 +96,27 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("project", re.compile(r"\bairfryer\b", re.IGNORECASE)),
     ("project", re.compile(r"\bheymars\b", re.IGNORECASE)),
     ("project", re.compile(r"IAI-Smart")),
+    # ── The catalogue hole that made this whole check ornamental ────────────────────────────
+    # Found 2026-08-11: the docstring above says this repo "must never name a specific machine,
+    # host, operator, or project/product", and the catalogue duly banned five project names --
+    # but the estate's LARGEST project was simply absent. Measured on the tree at the time:
+    # **166 occurrences across 32 tracked files**, with CI green the entire time. That is this
+    # repo's own recurring failure arriving in its own guard for the second time in one day: a
+    # check that cannot fail reports clean forever, and its green run is what stops anyone
+    # looking. `check_generic.py` records the identical shape for the operator's given name
+    # (122 occurrences, same cause, same green CI).
+    #
+    # ⚠️ DELIBERATELY NO WORD BOUNDARIES, unlike most entries above. `\biotta\b` was written
+    # first and it misses the two forms that actually leak hardest, because `_` is a word
+    # character and kills the boundary on both sides:
+    #     CONFIG_IOTTA_DIAG_WEB   (a Kconfig symbol quoted in a lesson)
+    #     iotta_firmware.bin      (a build artefact named in a guard's block message)
+    # The usual argument for boundaries is precision -- a guard that cries wolf gets bypassed
+    # and takes its true positives with it. It does not apply here: `iotta` is a coined name
+    # with no English substring host, so the bare match has no false-positive surface to
+    # protect. Same reasoning as the boundary-free `iai-xiaozhi` and `esp32-server` above.
+    # Both directions are covered in check_sanitized_test.py.
+    ("project", re.compile(r"iotta", re.IGNORECASE)),
 ]
 
 # Files that are allowed to name the tokens because naming them IS their subject: this checker
@@ -92,6 +125,12 @@ _EXEMPT_PATHS: frozenset[str] = frozenset(
     {
         "tools/check_sanitized.py",
         ".github/workflows/sanitized.yml",
+        # The test file must contain the tokens as its positive controls -- a pattern nobody can
+        # demonstrate firing is the failure this catalogue was just extended to fix. Same
+        # self-exemption `check_generic.py` grants `check_generic_test.py`, same reason, and the
+        # same cost: a genuine leak written INTO this file is invisible to the check. The
+        # mitigation is that the file is short and its only job is the two-directional table.
+        "tools/check_sanitized_test.py",
     }
 )
 

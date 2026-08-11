@@ -59,8 +59,8 @@ OVERRIDE = re.compile(r"pacer:\s*none\b", re.I)
 _HOME = os.path.expanduser("~")
 CONDUCTOR_ROOTS = [
     os.path.join(_HOME, "Documents", "GitHub", "conductor-bs"),
-    os.path.join(_HOME, "Documents", "GitHub", "iotta-bs"),
-    os.path.join(_HOME, "Documents", "GitHub", "iotta-firmware"),
+    os.path.join(_HOME, "Documents", "GitHub", "myproject-server"),
+    os.path.join(_HOME, "Documents", "GitHub", "myproject-firmware"),
 ]
 
 

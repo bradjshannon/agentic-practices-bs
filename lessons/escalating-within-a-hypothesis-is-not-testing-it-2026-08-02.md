@@ -1,6 +1,6 @@
 # Escalating within a hypothesis is not testing it
 
-**2026-08-02, iotta.** Two diagnoses failed in a row on "a verified flash won't stick." The answer
+**2026-08-02.** Two diagnoses failed in a row on "a verified flash won't stick." The answer
 was sitting in a log neither of them opened, and had been for an hour.
 
 ## The symptom

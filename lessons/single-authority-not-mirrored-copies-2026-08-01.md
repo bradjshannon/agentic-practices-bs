@@ -12,7 +12,7 @@ Measured:
 
 | file | said | how it updates |
 |---|---|---|
-| `conductors/iotta/brief.md` (the authority) | **50%** | edited directly |
+| `conductors/myproject/brief.md` (the authority) | **50%** | edited directly |
 | `~/.claude/scheduled-tasks/<task>/SKILL.md` | 60% | **nothing syncs it** — no repo copy existed at all |
 | `conductor-bs/skills/conductor-winddown/SKILL.md` | 60% | editable, but nobody did |
 | the same skill's **plugin cache** copy | 70% | one-way, refreshed only on plugin *update* |

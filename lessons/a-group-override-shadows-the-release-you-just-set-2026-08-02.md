@@ -1,12 +1,12 @@
 # A group override shadows the release you just set — and `firmware-list` still says "(released)"
 
-**2026-08-02, iotta.** Sibling of `ota-release-key-must-match-reported-version`: same control loop,
+**2026-08-02.** Sibling of `ota-release-key-must-match-reported-version`: same control loop,
 same silent self-perpetuating revert, different mismatch. There the two strings came from different
 *authorities*. Here they come from different *pointers*, and the operator only knew about one.
 
 ## The trap
 
-iotta's OTA releases are **layered**: a per-board default, plus optional per-group overrides
+The server's OTA releases are **layered**: a per-board default, plus optional per-group overrides
 (`firmware-release <board> <version> --group <name>`). `resolve_meta` prefers the group override when
 the device's group has one. This is documented in `docs/devices.md` and is a deliberate
 targeted-rollout feature — the bug is not in the layering.
@@ -14,7 +14,7 @@ targeted-rollout feature — the bug is not in the layering.
 The trap is that **the shadowed case is invisible at the point of use**. Running
 
 ```
-iotta-devices firmware-release esp32-s3-rgb-matrix 20260801-2325-d767c86
+myproject-devices firmware-release esp32-s3-rgb-matrix 20260801-2325-d767c86
 ```
 
 sets the board default, prints success, and has **no effect whatsoever** on a device whose group
@@ -31,7 +31,7 @@ escalating flash attempts and two failed diagnoses went into this before anyone 
 ## The fix that worked
 
 ```
-iotta-devices firmware-release esp32-s3-rgb-matrix 20260801-2325-d767c86 --group default
+myproject-devices firmware-release esp32-s3-rgb-matrix 20260801-2325-d767c86 --group default
 → 20260801-2325-d767c86  2133648 bytes  sha256=55024d53ed08…  (released, group:default)
 ```
 
@@ -66,4 +66,4 @@ not help, because the person about to be bitten has already decided which comman
 
 Related: `ota-release-key-must-match-reported-version`,
 `escalating-within-a-hypothesis-is-not-testing-it-2026-08-02`,
-`verify-flash-proves-consistency-never-currency-2026-08-01`, `iotta-bs/docs/devices.md`.
+`verify-flash-proves-consistency-never-currency-2026-08-01`, `myproject-server/docs/devices.md`.

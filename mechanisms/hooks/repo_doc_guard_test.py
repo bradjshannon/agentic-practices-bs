@@ -35,8 +35,55 @@ CMD = ["py", "-3", "-c",
 H = runpy.run_path(HOOK)
 
 # A real repo with a guidance doc, and a real file inside it to "edit".
-REPO = os.path.expanduser("~/Documents/GitHub/iotta-bs")
-TARGET = os.path.join(REPO, "server", "src", "iotta", "main.py")
+#
+# SANITISED, and the discovery fallback is why this still runs: the public copy may not name a
+# specific project, but this suite genuinely needs a real repo with a `CLAUDE.md` on disk (see
+# the EXIT CODES note above — it must be able to report NOT RUN, not a vacuous pass). So the
+# subject is resolved in three steps: an explicit env override, else the first repo under
+# `~/Documents/GitHub` that carries a `CLAUDE.md`, else nothing and the suite exits 2. Naming one
+# repo in source would have been a project leak; naming none would have made the suite
+# permanently unrunnable, which is the failure this file's own docstring exists to prevent.
+def _discover_repo() -> str:
+    override = os.environ.get("REPO_DOC_GUARD_TEST_REPO")
+    if override:
+        return override
+    root = os.path.expanduser("~/Documents/GitHub")
+    try:
+        for name in sorted(os.listdir(root)):
+            candidate = os.path.join(root, name)
+            # BOTH conditions matter: the guard resolves a repo root via `.git`, so a directory
+            # with a CLAUDE.md but no `.git` makes the guard allow() for a reason that has
+            # nothing to do with what these cases assert.
+            if (os.path.isfile(os.path.join(candidate, "CLAUDE.md"))
+                    and os.path.exists(os.path.join(candidate, ".git"))):
+                return candidate
+    except OSError:
+        pass
+    return os.path.join(root, "no-such-repo")
+
+
+def _discover_target(repo: str) -> str:
+    """A source file inside the repo but NOT at its root; only its PATH matters to the guard.
+
+    The guidance doc itself is deliberately excluded — the guard allows editing it by design,
+    so picking it would turn every DENY case into a vacuous ALLOW.
+    """
+    override = os.environ.get("REPO_DOC_GUARD_TEST_TARGET")
+    if override:
+        return override
+    for dirpath, dirnames, filenames in os.walk(repo):
+        dirnames[:] = [d for d in dirnames
+                       if not d.startswith(".") and d not in ("node_modules", "build")]
+        if os.path.abspath(dirpath) == os.path.abspath(repo):
+            continue  # skip the root, where the guidance docs live
+        for filename in sorted(filenames):
+            if filename.endswith((".py", ".md", ".ts", ".c", ".cpp")):
+                return os.path.join(dirpath, filename)
+    return os.path.join(repo, "src", "no-such-file.py")
+
+
+REPO = _discover_repo()
+TARGET = _discover_target(REPO)
 DOC = os.path.join(REPO, "CLAUDE.md")
 
 FAILURES = []

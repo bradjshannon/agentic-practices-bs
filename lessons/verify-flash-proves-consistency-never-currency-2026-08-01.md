@@ -1,6 +1,6 @@
 # `verify_flash` proves consistency, never currency — and the stale file makes it a contaminated control
 
-**2026-08-01, iotta.** Five hours went into a C++ "impossibility" that never existed. The board had
+**2026-08-01.** Five hours went into a C++ "impossibility" that never existed. The board had
 been running a 14.5-hour-old image the whole time, and the check everyone trusted was structurally
 incapable of noticing.
 

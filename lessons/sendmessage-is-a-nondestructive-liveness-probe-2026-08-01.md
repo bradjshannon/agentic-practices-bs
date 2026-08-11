@@ -1,6 +1,6 @@
 # `SendMessage` is a non-destructive liveness probe; `TaskStop` answers less and costs more
 
-**2026-08-01, iotta.** A conductor killed a healthy subagent to find out whether it was alive. It
+**2026-08-01.** A conductor killed a healthy subagent to find out whether it was alive. It
 already had the answer, in a tool result it had read twenty minutes earlier and dismissed as
 bookkeeping.
 

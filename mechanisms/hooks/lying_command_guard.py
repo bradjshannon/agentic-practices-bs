@@ -240,7 +240,7 @@ def check(cmd: str, run_in_background: bool = False):
     #    NOT an env script to dot-source. Dot-sourcing runs idf.py with NO args, prints the
     #    help, and EXITS 0 having built nothing; a background runner then reports "completed"
     #    and the stale build/ output reads as a successful build. Cost two build cycles on
-    #    2026-07-19 and was only caught by the unchanged iotta_firmware.bin size.
+    #    2026-07-19 and was only caught by the unchanged myproject_firmware.bin size.
     #    Match the dot-source specifically — a bare `idf.py` inside an already-exported IDF
     #    shell is legitimate and must NOT fire.
     if re.search(r"(^|[;&|]|\s)\.\s+[^\s;|&]*idf\.ps1", cmd) and re.search(r"\bidf\.py\b", cmd):
@@ -249,12 +249,12 @@ def check(cmd: str, run_in_background: bool = False):
             "Dot-sourcing it runs idf.py argless, prints the help and EXITS 0 while building "
             "NOTHING; the runner still reports success and the stale build/ output looks fresh.",
             "Call the wrapper directly: `.\\idf.ps1 build` / `.\\idf.ps1 -p COM7 app-flash`. "
-            "Then confirm the build really happened by comparing build/iotta_firmware.bin size "
+            "Then confirm the build really happened by comparing build/myproject_firmware.bin size "
             "before and after — never trust the exit code.",
         ))
 
     # 5b. A bare `docker` command on a host where docker is not on PATH -- observed 2026-08-09:
-    #     `docker logs iotta-bs-iotta-1 | grep -c capture-stream` returned 0 from Git Bash, and
+    #     `docker logs myproject-server-app-1 | grep -c capture-stream` returned 0 from Git Bash, and
     #     the conductor was one step from treating that as CONTRADICTING a firmware lot's report.
     #     The real cause was `docker: command not found`; docker lives in WSL2 on this host, not
     #     on the Windows PATH. An instrument's silence is not data, and grep's "0" on a command
@@ -336,11 +336,11 @@ def check(cmd: str, run_in_background: bool = False):
 
     # 6a. The raw CLI primitives, in any shell and behind any `wsl`/`docker exec` prefix.
     #     Anchored at a shell-segment start (with an optional launcher prefix) rather than matched
-    #     anywhere, so `grep -rn "iotta-devices firmware-push" tools/` -- where the words are an
+    #     anywhere, so `grep -rn "myproject-devices firmware-push" tools/` -- where the words are an
     #     ARGUMENT, not the verb -- does not fire. Same discriminator as `_PYTEST_INVOCATION`.
     if _OTA_CLI.search(_ota_visible):
         problems.append((
-            "`iotta-devices firmware-push` / `firmware-release` / `firmware-add` invoked "
+            "`myproject-devices firmware-push` / `firmware-release` / `firmware-add` invoked "
             "directly. These are the primitives, not the interface: called by hand they accept a "
             "version string that no image ever reported (the ~90 s reboot-loop incident, "
             "misdiagnosed once as a firmware defect) and they report success from an exit code "
@@ -578,7 +578,7 @@ def check(cmd: str, run_in_background: bool = False):
     #    `--theirs/--ours/--patch` and a detached-hash checkout are path/inspection operations and
     #    are left alone -- a guard that cried wolf on those would be turned off inside a day, and
     #    this codebase's own doctrine is that such a guard takes its true positives with it.
-    _PRIMARY = re.compile(r"[/\\]Documents[/\\]GitHub[/\\](iotta-bs|iotta-firmware|conductor-bs|"
+    _PRIMARY = re.compile(r"[/\\]Documents[/\\]GitHub[/\\](myproject-server|myproject-firmware|conductor-bs|"
                           r"conductor-pub|agentic-practices-bs)[/\\]?$")
     _NOT_PRIMARY = re.compile(r"\.wt[/\\]|worktrees[/\\]|scratchpad|[/\\]Temp[/\\]", re.I)
     if "guard:ok" not in raw:
@@ -682,7 +682,7 @@ def check(cmd: str, run_in_background: bool = False):
     #
     # THE COST IS WALL CLOCK, NOT OUTPUT VOLUME, and the message must say so. Measured
     # 2026-08-08 over 13,527 commands in 57 sessions
-    # (conductor-bs/conductors/iotta/proposals/2026-08-08-offload-guard-measurement.md):
+    # (conductor-bs/conductors/myproject/proposals/2026-08-08-offload-guard-measurement.md):
     # **316 of 343 `pytest` invocations (92%) were ALREADY piped to `tail`/`head`.** Output
     # volume has been handled by hand for three weeks; a guard framed around context bloat would
     # fire on commands that deliver two lines. So this says "background it", NOT "hand it to the
@@ -784,14 +784,14 @@ def _slow_foreground_shape(text: str):
 #
 # The leading anchor is what separates the verb from the noun: a shell-segment start, optionally
 # preceded by env assignments and by a launcher that carries the real command (`wsl -e bash -lc
-# "docker exec … iotta-devices firmware-push …"` is one segment, and the quoted payload is
+# "docker exec … myproject-devices firmware-push …"` is one segment, and the quoted payload is
 # deliberately still visible on this rule's surface). Without the anchor,
-# `grep -rn "iotta-devices firmware-push" tools/` fires -- the same false positive
+# `grep -rn "myproject-devices firmware-push" tools/` fires -- the same false positive
 # `_PYTEST_INVOCATION` was narrowed to avoid.
 _OTA_CLI = re.compile(
     r"(?:^|[;&|\n]|&&|\|\|)\s*(?:\w+=\S+\s+)*"
     r"(?:(?:wsl|docker|sudo|pwsh|powershell|bash|sh)\b[^;&|\n]*?\s)?"
-    r"iotta-devices\b[^;&|\n]*?\bfirmware-(?:push|release|add)\b",
+    r"myproject-devices\b[^;&|\n]*?\bfirmware-(?:push|release|add)\b",
     re.I | re.M,
 )
 
@@ -821,7 +821,7 @@ _OTA_ROUTE = re.compile(
 _OTA_WRAPPER_FILE = re.compile(
     r"-File\s+['\"]?[^\s'\";|&]*ota-(?:deliver|push)\.ps1", re.I)
 # A RELATIVE path in command position. The lookbehind on `tools` is what keeps an ABSOLUTE path
-# that happens to contain a `tools/` component (`C:/…/iotta-firmware/tools/ota-deliver.ps1`) from
+# that happens to contain a `tools/` component (`C:/…/myproject-firmware/tools/ota-deliver.ps1`) from
 # reading as relative -- the character before `tools` is a separator there, and only a bare
 # `tools/` at the start of the path is the relative form. Requiring command position is what
 # keeps `cat tools/ota-deliver.ps1` and a quoted prose mention silent.

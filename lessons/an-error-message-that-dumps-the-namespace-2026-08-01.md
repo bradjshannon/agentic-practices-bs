@@ -1,6 +1,6 @@
 # An error message that dumps the whole namespace bills the scarce resource on the error path
 
-**2026-08-01, iotta conductor run 26.**
+**2026-08-01, conductor run 26.**
 
 ## What happened
 
