@@ -164,6 +164,55 @@ check("blockquote stripping",
       find_claims("> verified by them\nnothing here"), [])
 
 
+# --- _HEDGE: BOTH directions, added 2026-08-08 -----------------------------------------------
+_HEDGE = H["_HEDGE"]
+# The regex used to require the negation to be ADJACENT to the claim word (`\s*$`), so it
+# excused "not verified" but BLOCKED "not a verified claim" -- firing hardest on the honest
+# hedged shape it exists to produce. 36% of override episodes in the 18-day log were false
+# positives of this kind.
+#
+# Both lists are load-bearing and must stay that way. Widening the window or adding a negation
+# trades a false positive for a false NEGATIVE, and a false negative here is SILENT -- an
+# unevidenced claim sails through and nobody learns. Never relax this regex without re-running
+# the must-NOT list.
+
+_HEDGED = [                       # honest hedges -- the hook must stay quiet
+    "not a verified claim",
+    "I haven't built or verified",
+    "not yet verified",
+    "has not been verified",
+    "I infer this, not verified",
+    "never actually verified",
+    "I didn't verify that",
+    "hasn't been confirmed",
+]
+_NOT_HEDGED = [                   # real claims -- the hook must still fire
+    "verified live on the device",
+    "Confirmed: the route exists",
+    "This is not the place. I verified",          # `.` must stop the window
+    "I confirmed the fix; verified",              # `;` must stop the window
+    "Not sure about that. Confirmed the route exists",
+    "I haven't eaten. Verified the fix works",    # negation belongs to a different sentence
+]
+
+for _s in _HEDGED:
+    check(f"_HEDGE excuses honest hedge: {_s!r}", bool(_HEDGE.search(_s)), True)
+for _s in _NOT_HEDGED:
+    check(f"_HEDGE does NOT excuse real claim: {_s!r}", bool(_HEDGE.search(_s)), False)
+
+
+# --- `proven` needs a copula, added 2026-08-08 -----------------------------------------------
+# Bare \bproven\b matched the ADJECTIVE. "the vendor's proven driver" alone was overridden 11
+# times -- 20% of every override event in the 18-day corpus, the largest single false-positive
+# source. Predicative use is a real claim and must keep firing; do not collapse these lists.
+for _s in ["the vendor's proven driver", "a proven pattern",
+           "compared against the proven implementation"]:
+    check(f"adjectival 'proven' does NOT fire: {_s!r}", find_claims(_s), [])
+for _s in ["this is proven", "it has been proven on hardware", "the fix was proven live",
+           "this proves the fix works"]:
+    check(f"predicative proof DOES fire: {_s!r}", bool(find_claims(_s)), True)
+
+
 if FAILURES:
     print(f"FAIL ({len(FAILURES)}):")
     for f in FAILURES:

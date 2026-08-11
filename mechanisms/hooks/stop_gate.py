@@ -61,6 +61,8 @@ CHECKS = [
     "output_budget.py",
     "pacer_armed.py",
     "context_ledger.py",
+    "context_claim_guard.py",
+    "estimate_tracker.py",  # never blocks -- pure bookkeeping (see its own docstring)
 ]
 
 

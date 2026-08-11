@@ -47,6 +47,8 @@ GH = os.path.expanduser("~/Documents/GitHub")
 COND = os.path.join(GH, "conductor-bs", "conductors", "iotta")
 INBOX = os.path.join(COND, "inbox.jsonl")
 NEEDS = os.path.join(COND, "needs-you.md")
+# The page generator, loaded only for `stale_report()` -- see stale_instructions() below.
+GEN = os.path.join(GH, "conductor-bs", "tools", "conductor-status.py")
 
 # Standing guidance that priming MUST cover. Brad, 2026-07-22: "Does priming include reading the
 # docs in conductor-bs and agentic best practices? It needs to."
@@ -108,6 +110,45 @@ INSTRUCTION_MARKERS = ("next run", "you said", "asap", "only you can do")
 MAX_ITEMS = 12
 
 
+_conductor_status_mod = None  # cache: loaded once per hook run, both callers need it
+
+
+def _load_conductor_status():
+    """Load conductor-status.py by path, the way this hook always has -- but with its own
+    directory on sys.path first.
+
+    ── WHY THIS EXISTS (2026-08-06) ──────────────────────────────────────────────────────────
+    `6a60974` (conductor-bs) extracted `conductor_render_core.py` as a sibling module in
+    `tools/`, imported from `conductor-status.py` as a bare `import conductor_render_core`.
+    That works when the script is run normally (`python conductor-status.py`) because Python
+    puts the script's own directory at `sys.path[0]`. It silently breaks under
+    `importlib.util.spec_from_file_location` + `module_from_spec`, which does NOT touch
+    `sys.path` -- so every load-by-path caller (this hook's two of them) started raising
+    `ModuleNotFoundError: No module named 'conductor_render_core'` the moment that commit
+    landed, and both failures were swallowed by their `except Exception` and reported as
+    generic "could not ..." notes. Reads exactly like staleness; it is a load-path bug.
+    Reproduced directly: `python -c "importlib.util.spec_from_file_location(...); exec_module"`
+    raises the ModuleNotFoundError; `python conductor-status.py --help` (cwd=tools/) does not.
+    """
+    global _conductor_status_mod
+    if _conductor_status_mod is not None:
+        return _conductor_status_mod
+    import importlib.util
+    tools_dir = os.path.dirname(GEN)
+    added = tools_dir not in sys.path
+    if added:
+        sys.path.insert(0, tools_dir)
+    try:
+        spec = importlib.util.spec_from_file_location("conductor_status_for_hook", GEN)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+    finally:
+        if added:
+            sys.path.remove(tools_dir)
+    _conductor_status_mod = mod
+    return mod
+
+
 def unhandled_inbox() -> tuple[list, str | None]:
     if not os.path.exists(INBOX):
         return [], f"{INBOX} not present"
@@ -131,6 +172,32 @@ def unhandled_inbox() -> tuple[list, str | None]:
     return rows, note
 
 
+def split_unhandled(rows: list) -> tuple[list, list, str | None]:
+    """`(asks, done_acks, note)` — a question is an obligation, a Done ack is a fact.
+
+    Brad, 2026-07-29: *"i need a 'done' button for simple tasks you give me like 'run this cmd',
+    so you don't have to parse tokens for an ack"*. That button appends an ordinary inbox row with
+    `selected: ["__done__"]`, so WITHOUT this split it would land in the list above headed *"UNREAD
+    /UNHANDLED items ... not optional background"* — i.e. every command he finished would read as
+    an unanswered question. A button that inflates that list is worse than no button.
+
+    THE RULE LIVES IN THE REPO (`classify_unhandled()` in tools/conductor-status.py), same
+    delegation as `stale_cards()` below and for the same reason: the repo syncs on a `git pull`,
+    a hook file does not, and a second copy of the rule is a thing that drifts. If the generator
+    cannot be loaded this degrades to "everything is an ask" and SAYS SO — over-reporting is the
+    safe direction here, and a silent degrade would look exactly like "he never pressed Done".
+    """
+    if not os.path.exists(GEN):
+        return rows, [], f"{GEN} MISSING — cannot separate Done acks from questions; all rows " \
+                         "below are listed as asks. Clone conductor-bs."
+    try:
+        mod = _load_conductor_status()
+        asks, dones = mod.classify_unhandled(rows)
+        return asks, dones, None
+    except Exception as exc:
+        return rows, [], f"could not classify Done acks ({exc}); all rows listed as asks"
+
+
 def instruction_sections() -> tuple[list, str | None]:
     if not os.path.exists(NEEDS):
         return [], f"{NEEDS} not present"
@@ -149,6 +216,38 @@ def instruction_sections() -> tuple[list, str | None]:
         elif cur is not None and ln.strip():
             cur["body"].append(ln.strip())
     return out, None
+
+
+def stale_cards() -> tuple[str, str | None]:
+    """The conductor's own stale-pinned-card report, for turn 0. `(report, note)`.
+
+    ── WHY THIS IS HERE (2026-07-28) ─────────────────────────────────────────────────────────
+    Brad: *"i'm sick of seeing the stale card warning. that warning should be delivered to YOU"*.
+    His page used to carry a red "N STALE CARDS" strip above everything he had to decide. Staleness
+    is a defect in the CONDUCTOR's bookkeeping -- a card written before his last message and never
+    reconciled -- so showing it to him converted my unfinished work into a chore for him, on the one
+    surface built to spend less of his attention. It was removed from the page and redirected here.
+
+    HERE, and not "a line in the brief telling the conductor to check", for the same reason this
+    whole file exists: per conductors/iotta/brief.md's enforcement table, a control that requires
+    remembering is the Voluntary class and decays. SessionStart stdout lands in context before the
+    first tool call, so the run knows whether it is serving him stale cards whether or not it ever
+    heard of this check.
+
+    THE WORDING AND THE VERDICT LIVE IN THE REPO (`stale_report()` in tools/conductor-status.py),
+    not here. This is a ~15-line delegation on purpose: the repo syncs across both machines on a
+    `git pull`, a hook file does not, and a second copy of the logic is a thing that drifts.
+    """
+    if not os.path.exists(GEN):
+        return "", f"{GEN} MISSING — cannot check for stale cards. Clone conductor-bs."
+    try:
+        mod = _load_conductor_status()
+        return mod.stale_report(), None
+    except Exception as exc:
+        # FAIL-QUIET, NOT FAIL-SILENT (see the module docstring): an empty report and a broken
+        # importer must not look the same, or "no stale cards" becomes a thing that is never true
+        # and never false.
+        return "", f"could not run the stale-card report: {exc}"
 
 
 def guidance_index() -> tuple[list[tuple[str, list[str], str | None]], list[str], str | None]:
@@ -174,38 +273,15 @@ def guidance_index() -> tuple[list[tuple[str, list[str], str | None]], list[str]
     return out, named, note
 
 
-def main() -> int:
-    inbox, inote = unhandled_inbox()
-    sections, snote = instruction_sections()
+def print_guidance() -> None:
+    """The standing-guidance index. Printed on EVERY session, unconditionally.
 
-    if not inbox and not sections and not inote and not snote:
-        return 0  # genuinely nothing pending -- stay quiet
-
-    print("=== PENDING INSTRUCTIONS FROM BRAD (injected by pending_instructions.py) ===")
-    print("These are UNREAD/UNHANDLED items from the two channels he uses to instruct a run.")
-    print("They are not optional background. Read the source files before planning the run.\n")
-
-    print(f"-- Status-page feedback, unhandled: {len(inbox)}  [{INBOX}] --")
-    if inote:
-        print(f"   !! {inote}")
-    for e in inbox[:MAX_ITEMS]:
-        sel = " / ".join(str(s) for s in (e.get("selected") or [])) or "-"
-        txt = (e.get("text") or "").replace("\n", " ")
-        print(f"   [{str(e.get('ts'))[:19]}] item={e.get('item_id')} answer={sel}")
-        if txt:
-            print(f"        text: {txt[:300]}")
-    if len(inbox) > MAX_ITEMS:
-        print(f"   ... and {len(inbox) - MAX_ITEMS} more")
-
-    print(f"\n-- Instruction sections in needs-you.md: {len(sections)}  [{NEEDS}] --")
-    if snote:
-        print(f"   !! {snote}")
-    for s in sections:
-        print(f"   ## {s['title']}")
-        for b in s["body"][:6]:
-            print(f"      {b[:200]}")
-        if len(s["body"]) > 6:
-            print(f"      ... ({len(s['body']) - 6} more lines -- READ THE FILE)")
+    It used to sit at the tail of main(), below an early return taken whenever the inbox,
+    instruction sections and stale cards were all empty -- so a block believed to be Structural
+    was in fact coupled to unrelated state. Measured 2026-08-10 across the hook's whole lifetime:
+    it reached 57 of 923 sessions, 6.2%. Every "it is in PRIMING.md, so the next agent gets it"
+    claim rested on this, and 93.8% of the time nobody got anything.
+    """
     dir_entries, named, mnote = guidance_index()
     print("\n-- STANDING GUIDANCE — priming MUST cover these (`git pull` both repos first) --")
     print("   (manifest: conductor-bs/PRIMING.md — edit THAT to change what is primed)")
@@ -223,6 +299,74 @@ def main() -> int:
             print(f"   {n}")
     print("   Read the ones relevant to what you are about to do. They are short, they are")
     print("   failure-earned, and every one exists because something went wrong without it.")
+
+
+def main() -> int:
+    inbox, inote = unhandled_inbox()
+    sections, snote = instruction_sections()
+    stale, stnote = stale_cards()
+
+    if not inbox and not sections and not inote and not snote and not stale and not stnote:
+        # Nothing pending -- stay quiet about the INBOX, but still deliver the guidance index.
+        print_guidance()
+        return 0
+
+    print("=== PENDING INSTRUCTIONS FROM BRAD (injected by pending_instructions.py) ===")
+    print("These are UNREAD/UNHANDLED items from the two channels he uses to instruct a run.")
+    print("They are not optional background. Read the source files before planning the run.\n")
+
+    asks, dones, dnote = split_unhandled(inbox)
+
+    print(f"-- Status-page feedback, unhandled: {len(asks)}  [{INBOX}] --")
+    if inote:
+        print(f"   !! {inote}")
+    if dnote:
+        print(f"   !! {dnote}")
+    for e in asks[:MAX_ITEMS]:
+        sel = " / ".join(str(s) for s in (e.get("selected") or [])) or "-"
+        txt = (e.get("text") or "").replace("\n", " ")
+        # The `id` is printed because it is the handle every tool now takes (`ack-inbox.py --id`,
+        # the page's supersede field). The timestamp stays for human orientation, but it is NOT an
+        # identity: at whole-second resolution two messages sent in the same second shared one.
+        # A row written before ids existed says so rather than showing a blank.
+        print(f"   [{str(e.get('ts'))[:19]}] id={e.get('id') or '(pre-id row)'} "
+              f"item={e.get('item_id')} answer={sel}")
+        if txt:
+            print(f"        text: {txt[:300]}")
+    if len(asks) > MAX_ITEMS:
+        print(f"   ... and {len(asks) - MAX_ITEMS} more")
+
+    # Separate heading, and NOT under "unhandled items ... not optional background": these are
+    # things he FINISHED, not things he is waiting on. Still printed, and still un-acked, because
+    # "he ran the command you asked for" is usually the input the next step needs -- ack them with
+    # `tools/ack-inbox.py --id <id>` once you have used them.
+    if dones:
+        print(f"\n-- He pressed DONE on {len(dones)} item(s) — tasks he COMPLETED, not questions --")
+        for e in dones[:MAX_ITEMS]:
+            txt = (e.get("text") or "").replace("\n", " ")
+            print(f"   [{str(e.get('ts'))[:19]}] id={e.get('id') or '(pre-id row)'} "
+                  f"item={e.get('item_id')} DONE" + (f" — note: {txt[:200]}" if txt else ""))
+        if len(dones) > MAX_ITEMS:
+            print(f"   ... and {len(dones) - MAX_ITEMS} more")
+
+    print(f"\n-- Instruction sections in needs-you.md: {len(sections)}  [{NEEDS}] --")
+    if snote:
+        print(f"   !! {snote}")
+    for s in sections:
+        print(f"   ## {s['title']}")
+        for b in s["body"][:6]:
+            print(f"      {b[:200]}")
+        if len(s["body"]) > 6:
+            print(f"      ... ({len(s['body']) - 6} more lines -- READ THE FILE)")
+    # YOUR OWN BOOKKEEPING, not his. Printed here rather than on his page (see stale_cards()).
+    if stale or stnote:
+        print("\n-- Your stale pinned cards (NOT shown to Brad — this is yours to fix) --")
+        if stnote:
+            print(f"   !! {stnote}")
+        for line in (stale or "").splitlines():
+            print(f"   {line}")
+
+    print_guidance()
     print("=== end pending instructions ===")
     return 0
 

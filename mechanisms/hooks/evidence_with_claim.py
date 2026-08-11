@@ -100,15 +100,39 @@ _NEGATIVE_EXISTENCE = [
 _VERIFICATION = [
     r"\bverified\b",
     r"\bconfirmed\b",
-    r"\bproven\b",
+    # `proven` REQUIRES A COPULA, unlike `proves`. Measured 2026-08-08 over 18 days of this
+    # hook's log: bare `\bproven\b` matched the ADJECTIVE ("the vendor's proven driver", "a
+    # proven pattern"), and that one phrase alone was overridden 11 times -- 20% of every
+    # override event, the single largest false-positive source in the corpus. Predicative use
+    # ("is proven", "has been proven") is a real claim and still fires. `proves` needs no such
+    # guard: it is always a finite verb.
+    r"\b(?:is|are|was|were|been|be)\s+proven\b",
     r"\bproves\b",
 ]
 
 # Hedged / negated forms -- the HONEST shape. If the claim word is preceded by one of these
 # within a few characters, it is a disclaimer, not an assertion.
+# The trailing window (was a bare `\s*$`) exists because ADJACENCY was too strict, measured
+# 2026-08-08 against 18 days of this hook's own log. `not verified` was excused correctly, but
+# `not a verified claim` and `I haven't built or verified that split` were BLOCKED AS ASSERTIONS
+# -- i.e. the hook fired hardest on the honest hedged shape it exists to produce, which is the
+# cry-wolf failure the _HEDGE_AFTER comment below already names. False positives were 36% of
+# override episodes.
+#
+# The window is deliberately bounded and MUST NOT cross a clause terminator: `[^.!?;:]` is what
+# stops "This is not the place. I verified the fix." from having its real claim excused by a
+# `not` in the previous sentence. 40 chars covers the observed misses ("a", "built or",
+# "yet been") with no room for a whole clause. Widening this further trades a false positive for
+# a false negative, and a false negative here is silent -- do not raise it without re-running
+# the both-directions controls in evidence_with_claim_test.py.
 _HEDGE = re.compile(
     r"(?:\bnot\b|\bun|\bisn't\b|\bwasn't\b|\bnever\b|\bcan't be\b|\bcannot be\b|\byet to be\b|"
-    r"\bwithout being\b|\bneeds? to be\b|\bwants? to be\b|\bshould be\b)\s*$",
+    # haven't/hasn't/hadn't/don't/doesn't/didn't were MISSING while isn't/wasn't were present --
+    # same class of negation, no reason for the split. "I haven't built or verified that split"
+    # was a real blocked-honest-hedge in the 2026-08-08 log sample.
+    r"\bhaven't\b|\bhasn't\b|\bhadn't\b|\bdon't\b|\bdoesn't\b|\bdidn't\b|\bcouldn't\b|\bwon't\b|"
+    r"\bwithout being\b|\bneeds? to be\b|\bwants? to be\b|\bshould be\b)"
+    r"[^.!?;:]{0,40}$",
     re.I,
 )
 
@@ -163,47 +187,25 @@ def _norm(s: str) -> str:
 
 
 def turn(transcript_path: str) -> tuple[str, str, int]:
-    """(assistant text this turn, concatenated tool-result text this turn, tool-call count).
+    """Delegates to the shared window; see the fallback below for why the local copy remains.
 
-    A user entry with STRING content is real human input and starts the turn; a list-shaped one
-    is a tool result being fed back, which stays INSIDE the turn.
+    The local implementation treated a background-task notification as human input, so the
+    "quoted verbatim from a tool result in THIS turn" check scoped to a window that began at a
+    notification — evidence produced earlier in the real turn looked absent, and the hook could
+    demand a quote for a claim whose support was two notifications back. Measured: 25 fake
+    boundaries against 37 real ones in a single session.
     """
+    # The local copy is deleted deliberately: it was the buggy boundary (a <task-notification>
+    # reset the window), and a fallback to it would silently reintroduce exactly the defect the
+    # shared module fixes. On import failure, fail OPEN (no claims checked, hook passes) rather
+    # than fall back to the wrong answer.
     try:
-        with open(transcript_path, encoding="utf-8", errors="replace") as fh:
-            entries = [json.loads(line) for line in fh if line.strip()]
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from turn_window import turn as _shared
+        t = _shared(transcript_path)
+        return t["said"], t["tool_results"], t["tool_calls"]
     except Exception:
         return "", "", 0
-
-    start = 0
-    for i in range(len(entries) - 1, -1, -1):
-        content = (entries[i].get("message") or {}).get("content")
-        if entries[i].get("type") == "user" and isinstance(content, str) and content.strip():
-            start = i
-            break
-
-    said, results, calls = [], [], 0
-    for e in entries[start:]:
-        content = (e.get("message") or {}).get("content")
-        if not isinstance(content, list):
-            continue
-        is_assistant = e.get("type") == "assistant"
-        for block in content:
-            if not isinstance(block, dict):
-                continue
-            kind = block.get("type")
-            if kind == "text" and is_assistant:
-                said.append(block.get("text") or "")
-            elif kind == "tool_use":
-                calls += 1
-            elif kind == "tool_result":
-                c = block.get("content")
-                if isinstance(c, str):
-                    results.append(c)
-                elif isinstance(c, list):
-                    for sub in c:
-                        if isinstance(sub, dict) and sub.get("type") == "text":
-                            results.append(sub.get("text") or "")
-    return "\n".join(said), "\n".join(results), calls
 
 
 def _log(event: str, trigger: str, transcript: str, extra: dict) -> None:
