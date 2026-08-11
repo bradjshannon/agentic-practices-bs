@@ -185,7 +185,7 @@ class Measurement:
     def cite(self) -> str:
         """The token to paste into a doc alongside the number.
 
-        A prose citation chain is enough -- Brad, 2026-08-01: "as long as there is a chain that
+        A prose citation chain is enough -- the operator, 2026-08-01: "as long as there is a chain that
         leads back to the primary source, this may be acceptable. like, once cited, we don't need
         to repeat the citation every time we mention a data point from it."
 

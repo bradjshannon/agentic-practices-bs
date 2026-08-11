@@ -147,7 +147,7 @@ def _transcript_has_agent_dispatch(transcript_path):
 def actor_transcript(data):
     """The transcript of the ACTOR making this call — the subagent's own, if it is one.
 
-    PER-AGENT KEYING (the intent Brad confirmed: "every actor that edits must itself have read
+    PER-AGENT KEYING (the intent the operator confirmed: "every actor that edits must itself have read
     the conventions"). Until 2026-07-22 this guard read `transcript_path`, which for a
     delegated agent is the PARENT session's file. That is wrong in both directions:
 

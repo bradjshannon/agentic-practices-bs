@@ -3,7 +3,7 @@
 
 WHY
 ---
-Brad, 2026-07-19, after ~a dozen instances in 48 hours: *"I'm not a SWE genius. I'm not
+The operator, 2026-07-19, after ~a dozen instances in 48 hours: *"I'm not a SWE genius. I'm not
 even a trained SWE. How do we get YOU to see these better solutions?"* The pattern was
 always the same shape — he asked a **purpose** question and a **mechanism** had already
 been chosen:
@@ -24,7 +24,7 @@ A prose rule for this already exists in dev-philosophy and the conductor brief, 
 is the class that decays: it is satisfiable by *saying* you did it. So this is the
 guard-at-the-action version. It cannot verify that thinking happened — only that the
 field exists — but a missing or vacuous requirement line is then visible to a reader who
-has not read the diff, which is the point. Brad: *"I don't understand why we can't
+has not read the diff, which is the point. The operator: *"I don't understand why we can't
 implement this mechanically now."*
 
 WHAT IT DOES

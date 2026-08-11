@@ -11,9 +11,9 @@ says so:
      restoring a remedy that costs double."
 
 That prediction came true on 2026-07-26. The hook had been switched to advisory/silent on 07-24
-because blocking made Brad read the over-long message and then its rewrite -- a guard for
+because blocking made the operator read the over-long message and then its rewrite -- a guard for
 reducing reading that doubled it. Silent, it recorded fires all night and changed nothing, and
-Brad said:
+The operator said:
 
     "okay, I'm already regressing to reading through pages and pages of your output in chat.
      can't do it, not sustainable, it's handcrafting instead of automating"
@@ -42,7 +42,7 @@ import os
 import sys
 
 # MEASURE CUMULATIVE, NOT PER-MESSAGE. This is the correction that matters, and it was found by
-# running the instrument and disbelieving its silence. Measured on the session where Brad said
+# running the instrument and disbelieving its silence. Measured on the session where the operator said
 # "pages and pages":
 #     per-message : max 2,712 chars, only 3 of 120 messages over the 2,200 budget -- i.e. a
 #                   per-message cap saw NOTHING WRONG
@@ -53,14 +53,14 @@ import sys
 #
 # So: budget the reading load per SITTING -- everything since he last spoke -- because that is
 # the pile he actually faces when he comes back.
-SINCE_BUDGET = 6000   # chars of my prose since Brad last spoke
+SINCE_BUDGET = 6000   # chars of my prose since the operator last spoke
 SESSION_NOTE = 30000  # session total worth mentioning once it is this large
 
 
 def _volume(path: str) -> tuple[int, int, int, int]:
     """(since_human, since_msgs, session_total, session_msgs) of MY OWN chat text.
 
-    Tool calls and results excluded -- this counts only what Brad has to read. A user entry
+    Tool calls and results excluded -- this counts only what the operator has to read. A user entry
     containing a tool_result is not him speaking and does not reset the sitting.
     """
     try:
@@ -92,7 +92,7 @@ def _volume(path: str) -> tuple[int, int, int, int]:
 def _assistant_message_lengths(path: str) -> list[int]:
     """Character counts of the assistant's own TEXT blocks, one entry per message.
 
-    Tool calls and tool results are excluded: this measures what Brad has to READ.
+    Tool calls and tool results are excluded: this measures what the operator has to READ.
     """
     try:
         with open(path, encoding="utf-8", errors="replace") as fh:
@@ -131,7 +131,7 @@ def main() -> int:
 
     bits = []
     if since > SINCE_BUDGET:
-        bits.append(f"{since:,} chars in {since_n} messages since Brad last spoke "
+        bits.append(f"{since:,} chars in {since_n} messages since the operator last spoke "
                     f"(budget {SINCE_BUDGET:,})")
     if total > SESSION_NOTE:
         bits.append(f"{total:,} chars this session across {total_n} messages "

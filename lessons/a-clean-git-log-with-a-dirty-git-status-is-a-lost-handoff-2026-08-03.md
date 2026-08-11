@@ -2,7 +2,7 @@
 
 ## Symptom
 
-A conductor run wound down cleanly by its own account — Brad-directed, at a stated context
+A conductor run wound down cleanly by its own account — operator-directed, at a stated context
 percentage, with a session file describing real, verified work. The next run's preflight showed
 nothing wrong: `git log` on the relevant repo ended exactly where the session file said it would.
 

@@ -3,7 +3,7 @@
 **Mechanism:** `mechanisms/scripts/measurement_contract.py`
 **Class:** Structural — the bad state (a stored number with no comparability contract) is
 unrepresentable; `Measurement.__post_init__` refuses to construct one.
-**Origin:** iotta, 2026-08-01. Design credit: Brad.
+**Origin:** iotta, 2026-08-01. Design credit: the operator.
 
 ## The failure it prevents
 
@@ -58,7 +58,7 @@ and 8,491 B minutes apart on one healthy board. That looks precisely like a memo
 know you did *not* control. That is knowledge, not absence of it, so it refuses rather than
 flagging unknown.
 
-**Citations, not repetition.** Brad: *"as long as there is a chain that leads back to the primary
+**Citations, not repetition.** The operator: *"as long as there is a chain that leads back to the primary
 source... once cited, we don't need to repeat the citation every time."* A doc carries `[m:<id>]`
 once instead of restating conditions, and `resolve_citations()` turns a stale doc number from
 merely suspect into *checkable*. A dangling citation is reported, never silently dropped.

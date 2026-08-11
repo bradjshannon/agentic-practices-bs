@@ -428,7 +428,7 @@ def check(cmd: str, run_in_background: bool = False):
 
     # N. A conductor WRITER tool carrying `…` or $(…) inside DOUBLE quotes. The shell runs
     #    the substitution before the tool ever sees the argument, so the words vanish and
-    #    what lands in front of Brad is a sentence with a hole in it. Nothing errors: the
+    #    what lands in front of the operator is a sentence with a hole in it. Nothing errors: the
     #    tool prints its usual "replied on <thread>", the JSONL line is written, and the
     #    corruption is only visible by reading the stored text back.
     #
@@ -475,7 +475,7 @@ def check(cmd: str, run_in_background: bool = False):
                 "A status-page writer tool is being called with a backtick or $(...) that the "
                 "SHELL will execute first. The substituted words are deleted from the message "
                 "before the tool sees them -- the tool still reports success, and the corruption "
-                "is visible only by reading the stored text back. Brad reads the corrupted "
+                "is visible only by reading the stored text back. The operator reads the corrupted "
                 "version.",
                 "Pass the text without live substitution: single-quote the argument, or (better, "
                 "since the prose usually contains apostrophes too) build it in Python and call "
@@ -612,7 +612,7 @@ def check(cmd: str, run_in_background: bool = False):
                 "conductor's own commits landing on a live lot's branch. Capturing the branch and "
                 "asserting it afterwards detects this and cannot prevent it.",
                 "Provision your own worktree instead, then work there:\n"
-                "      python C:\\Users\\brad\\Documents\\GitHub\\conductor-bs\\tools\\"
+                "      python <conductor-repo>/tools/"
                 "worktree_fleet.py provision <repo> --branch <name>\n"
                 "    It branches from CURRENT HEAD (not the session-start commit) and junctions "
                 "server/ui/node_modules, so vitest and tsc run with no npm install.\n"
@@ -846,7 +846,7 @@ _CONDUCTOR_JSONL_WRITERS = (
      'python tools/note-find.py "<title>" "<one-line tldr>"   (--resolve/--reopen/--rewrite '
      'to change one)'),
     ("replies.jsonl", "reply.py",
-     'python tools/reply.py <thread> "<what you want to say to Brad>"   (--to <msg> to answer '
+     'python tools/reply.py <thread> "<what you want to say to the operator>"   (--to <msg> to answer '
      'a message)'),
 )
 

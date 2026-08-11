@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""SessionStart hook: put Brad's OUTSTANDING INSTRUCTIONS in context at turn 0.
+"""SessionStart hook: put the operator's OUTSTANDING INSTRUCTIONS in context at turn 0.
 
 WHY THIS IS A HOOK AND NOT A LINE IN THE BRIEF
 ----------------------------------------------
-On 2026-07-22 a conductor ran an entire session without seeing two explicit instructions Brad
+On 2026-07-22 a conductor ran an entire session without seeing two explicit instructions the operator
 had left for it. They were not lost -- they were sitting in `iotta-firmware/docs/needs-you.md`,
 written deliberately by the previous run's handoff. The conductor read `decisions.md`,
 `TODO.md` and the cold read (the three the brief names as required) and skipped that one.
-Brad had to ask "did you do that?" for it to surface.
+The operator had to ask "did you do that?" for it to surface.
 
-The same run also found three unhandled feedback items in `conductor-inbox.jsonl` -- Brad
+The same run also found three unhandled feedback items in `conductor-inbox.jsonl` -- the operator
 answering questions through the status page's own reply box -- **by accident**, because the
 file showed up as untracked in a `git status` run for an unrelated reason. Nothing polled it.
 
@@ -50,7 +50,7 @@ NEEDS = os.path.join(COND, "needs-you.md")
 # The page generator, loaded only for `stale_report()` -- see stale_instructions() below.
 GEN = os.path.join(GH, "conductor-bs", "tools", "conductor-status.py")
 
-# Standing guidance that priming MUST cover. Brad, 2026-07-22: "Does priming include reading the
+# Standing guidance that priming MUST cover. The operator, 2026-07-22: "Does priming include reading the
 # docs in conductor-bs and agentic best practices? It needs to."
 #
 # Listed as an INDEX, not pasted: the point is that a conductor cannot fail to know these exist
@@ -60,7 +60,7 @@ GEN = os.path.join(GH, "conductor-bs", "tools", "conductor-status.py")
 # Why here rather than as a line in the brief: the brief ALREADY said to pull the practices repo,
 # and a run still primed without it, because a doc instructing you to read another doc is the
 # Voluntary class. This fires whether or not the brief is read.
-# The list itself lives in the REPO, not here: `conductor-bs/PRIMING.md`. Brad, 2026-07-22:
+# The list itself lives in the REPO, not here: `conductor-bs/PRIMING.md`. The operator, 2026-07-22:
 # "maybe just say to read all the docs in given folders, or all the docs listed in a given file,
 # so it's easy to update in the future."
 #
@@ -105,7 +105,7 @@ def _parse_manifest() -> tuple[list[tuple[str, str]], list[tuple[str, str]], str
     return out["primed-dirs"], out["primed-files"], None
 
 # Headings in needs-you.md that carry INSTRUCTIONS (things to do) rather than decisions
-# awaiting Brad. Matched case-insensitively as substrings.
+# awaiting the operator. Matched case-insensitively as substrings.
 INSTRUCTION_MARKERS = ("next run", "you said", "asap", "only you can do")
 MAX_ITEMS = 12
 
@@ -175,7 +175,7 @@ def unhandled_inbox() -> tuple[list, str | None]:
 def split_unhandled(rows: list) -> tuple[list, list, str | None]:
     """`(asks, done_acks, note)` — a question is an obligation, a Done ack is a fact.
 
-    Brad, 2026-07-29: *"i need a 'done' button for simple tasks you give me like 'run this cmd',
+    The operator, 2026-07-29: *"i need a 'done' button for simple tasks you give me like 'run this cmd',
     so you don't have to parse tokens for an ack"*. That button appends an ordinary inbox row with
     `selected: ["__done__"]`, so WITHOUT this split it would land in the list above headed *"UNREAD
     /UNHANDLED items ... not optional background"* — i.e. every command he finished would read as
@@ -222,7 +222,7 @@ def stale_cards() -> tuple[str, str | None]:
     """The conductor's own stale-pinned-card report, for turn 0. `(report, note)`.
 
     ── WHY THIS IS HERE (2026-07-28) ─────────────────────────────────────────────────────────
-    Brad: *"i'm sick of seeing the stale card warning. that warning should be delivered to YOU"*.
+    The operator: *"i'm sick of seeing the stale card warning. that warning should be delivered to YOU"*.
     His page used to carry a red "N STALE CARDS" strip above everything he had to decide. Staleness
     is a defect in the CONDUCTOR's bookkeeping -- a card written before his last message and never
     reconciled -- so showing it to him converted my unfinished work into a chore for him, on the one
@@ -311,7 +311,7 @@ def main() -> int:
         print_guidance()
         return 0
 
-    print("=== PENDING INSTRUCTIONS FROM BRAD (injected by pending_instructions.py) ===")
+    print("=== PENDING INSTRUCTIONS FROM THE OPERATOR (injected by pending_instructions.py) ===")
     print("These are UNREAD/UNHANDLED items from the two channels he uses to instruct a run.")
     print("They are not optional background. Read the source files before planning the run.\n")
 
@@ -360,7 +360,7 @@ def main() -> int:
             print(f"      ... ({len(s['body']) - 6} more lines -- READ THE FILE)")
     # YOUR OWN BOOKKEEPING, not his. Printed here rather than on his page (see stale_cards()).
     if stale or stnote:
-        print("\n-- Your stale pinned cards (NOT shown to Brad — this is yours to fix) --")
+        print("\n-- Your stale pinned cards (NOT shown to the operator — this is yours to fix) --")
         if stnote:
             print(f"   !! {stnote}")
         for line in (stale or "").splitlines():

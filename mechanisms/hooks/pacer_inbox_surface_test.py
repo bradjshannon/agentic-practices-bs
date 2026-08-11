@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for the inbox-surfacing piece of pacer_announce.py (_new_inbox_lines / _entry_key).
 
-Brad's complaint: decisions entered on the status page mid-run sat unread until the next
+The operator's complaint: decisions entered on the status page mid-run sat unread until the next
 session's SessionStart hook. The fix piggybacks on the existing pacer-fire heartbeat. The load-
 bearing behaviors tested here: unhandled entries surface, handled entries don't, an entry once
 surfaced is never repeated (no nagging), and a later NEW entry still gets through after that.

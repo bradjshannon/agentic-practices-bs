@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PostToolUse instrument — how much raw command output did I pull into MY OWN context?
 
-REQUIREMENT FIRST (Brad, 2026-08-08): the consumer is a conductor deciding, per command, whether
+REQUIREMENT FIRST (the operator, 2026-08-08): the consumer is a conductor deciding, per command, whether
 to run it inline or hand it to a chore-runner. To make that decision it needs a number that does
 not exist anywhere today: at turn end, how many characters of raw tool output it absorbed itself,
 and which specific calls were the offenders. Without that number the "delegate voluminous output"

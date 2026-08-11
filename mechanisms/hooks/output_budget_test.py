@@ -10,7 +10,7 @@ every time it fired, roughly DOUBLING it. Blocking was therefore removed **delib
 hook now records the over-budget turn and returns 0 on every path.
 
 Its four firing tests were left asserting a block and failed for days: 9/13. Offered the
-choice of restoring the block, updating the tests, or deleting the hook, **Brad chose to
+choice of restoring the block, updating the tests, or deleting the hook, **the operator chose to
 update the tests** (2026-07-29). So the tests moved to the contract, not the other way
 around. Do not restore blocking here without changing the hook first.
 

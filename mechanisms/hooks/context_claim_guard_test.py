@@ -87,7 +87,7 @@ def _b():
 
 @case("B2: wind-down at 39% WITH the audited escape -> SILENT")
 def _b2():
-    r = run(transcript("Wind-down complete. winddown:early Brad asked me to stop here."))
+    r = run(transcript("Wind-down complete. winddown:early the operator asked me to stop here."))
     assert r == {}, r
 
 

@@ -87,7 +87,7 @@ measured set the threshold. So:
 | Can this environment even run the check? | same script, verdict `UNRUNNABLE` (exit 2) | per-run | n/a — reported, never folded into pass or fail |
 | Is this workstation carrying the mechanisms it means to? | `tools/check_workstation.py`, against a per-machine `~/.claude/mechanisms.toml` (built 2026-08-04) | per machine | **Yes — this is where opt-out belongs.** |
 
-The third row is what Brad is asking for, and the third-row instrument is the one to build. **It
+The third row is what the operator is asking for, and the third-row instrument is the one to build. **It
 now exists: `tools/check_workstation.py`** (2026-08-04), reading the per-machine manifest described
 below. It is deliberately *not* in CI — its subject is a machine, not this repo. Two
 partial ancestors exist in the private tactical repo — a generated installed-mechanisms report and
@@ -121,7 +121,7 @@ currently have no sync path at all** — the top table's first row says so — s
 nothing to execute until one exists. That ordering is a real dependency: the manifest is worth
 building first regardless, because it makes DECLINED expressible, which nothing today does.
 
-**Settled 2026-08-04 by Brad: granularity is PER MECHANISM.** Per-class stays available as a later
+**Settled 2026-08-04 by the operator: granularity is PER MECHANISM.** Per-class stays available as a later
 convenience; it is not the only knob, because a class-level decline silently absorbs any mechanism
 added to that class afterwards.
 
@@ -149,7 +149,7 @@ the recommendation above is to build the declared-intent column rather than a ne
 of these three would have been caught by a manifest plus a diff, with no new checking machinery at
 all. The third (git hooks) needs one new probe, which is `.git/hooks/` per declared repo.
 
-*(A fourth turned up while answering Brad's follow-up: the fix for the second finding above still
+*(A fourth turned up while answering the operator's follow-up: the fix for the second finding above still
 reported one repo "not cloned" when it was cloned — under `$HOME` rather than a `GitHub/` root,
 because it is a dotfiles repo and that is where dotfiles repos go. I asserted that WARN was a true
 positive, in a commit message, and used it as the positive control for the other two. Replacing a
@@ -220,7 +220,7 @@ being machine-specific, it is about how many places author them.
 
 ### Auto-sync scope: updates may auto-apply, add/remove/destructive must not
 
-Brad, 2026-08-04: *"we have an option for auto-UPDATES but never an option for auto-ADD/REM actions.
+The operator, 2026-08-04: *"we have an option for auto-UPDATES but never an option for auto-ADD/REM actions.
 Add/rem, as well as potentially destructive updates, need to be raised for the user's approval."*
 
 Right, and it turns `sync` from a per-file switch into a per-file switch **plus a per-operation floor

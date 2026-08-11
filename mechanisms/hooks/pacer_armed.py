@@ -3,15 +3,15 @@
 
 THE FAILURE THIS IS BUILT FROM (2026-07-22, measured, not estimated)
 --------------------------------------------------------------------
-The run went **idle for 7.1 hours** — 04:02 → 11:09 ET — and neither the agent nor Brad
-noticed until Brad asked what had been accomplished. There was no crash and nothing wedged.
-The last pacer completed at 03:21 and **none was armed after it**, so when Brad stopped
+The run went **idle for 7.1 hours** — 04:02 → 11:09 ET — and neither the agent nor the operator
+noticed until the operator asked what had been accomplished. There was no crash and nothing wedged.
+The last pacer completed at 03:21 and **none was armed after it**, so when the operator stopped
 messaging there was simply nothing left that could re-invoke the agent. An agent is only
 woken by a human message or a background task completing; with both absent, the run is over
 without ever saying so.
 
 **The shape is the point, and it is not carelessness.** Arming got dropped *precisely while
-Brad was actively messaging* — his replies were doing the waking, so re-arming felt redundant
+The operator was actively messaging* — their replies were doing the waking, so re-arming felt redundant
 every single turn. The mechanism was abandoned exactly when it was about to become the only
 thing that could wake the run. Any control whose perceived value is lowest right before it is
 needed cannot be left to judgement; that is the definition of the Voluntary class, and the
@@ -37,7 +37,7 @@ re-armed. Nothing to clean up, and no state that can rot into a false positive.
 
 WHEN IT IS RIGHT TO END UNARMED — `pacer:none`
 ----------------------------------------------
-Ending the run deliberately (wind-down complete, work genuinely finished, Brad said stop) is a
+Ending the run deliberately (wind-down complete, work genuinely finished, the operator said stop) is a
 legitimate unarmed end, and the token says so. Its use is LOGGED, including pre-emptive use, so
 if this hook decays into a formality that shows up as data instead of as a hunch — the same
 audit the other hooks now carry, built after three of them were found being satisfied in form.
@@ -184,18 +184,18 @@ def main() -> int:
 
     reason = (
         "NOTHING IS SCHEDULED TO WAKE THIS RUN — the turn cannot end here.\n\n"
-        "You are re-invoked by exactly two things: a message from Brad, or a background task "
+        "You are re-invoked by exactly two things: a message from the operator, or a background task "
         "completing. If neither is pending, ending this turn ends the run silently — no crash, "
         "no notice. That happened on 2026-07-22: the run sat idle 7.1 hours (04:02-11:09 ET) "
         "because the last pacer fired at 03:21 and none was armed after it.\n\n"
         "Note WHY it was dropped, because it will feel the same way now: arming lapsed while "
-        "Brad was actively messaging, since his replies were doing the waking. The pacer felt "
+        "the operator was actively messaging, since their replies were doing the waking. The pacer felt "
         "redundant right up until it was the only thing left.\n\n"
         "ARM IT — its own call, run_in_background:true, no `&`, no `nohup`, not appended to "
         "another command (the sleeping process must BE the background task):\n"
         "    python ~/.claude/turn-pacer.py --label '<what happens next>'\n"
-        "Omit --minutes so it adapts to how recently Brad spoke.\n\n"
-        "If you are deliberately ENDING THE RUN (wind-down done, work finished, Brad said "
+        "Omit --minutes so it adapts to how recently the operator spoke.\n\n"
+        "If you are deliberately ENDING THE RUN (wind-down done, work finished, the operator said "
         "stop), say `pacer:none` and proceed. That use is logged."
     )
     _log("fire", "no pacer armed at turn end", transcript)
