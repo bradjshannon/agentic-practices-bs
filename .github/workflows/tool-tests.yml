@@ -1,0 +1,49 @@
+name: tool-tests
+
+# Run every `tools/*_test.py` in this repo.
+#
+# WHY THIS EXISTS: before it, NOTHING ran them. `guard-ledger-freshness.yml` runs only the test
+# files that a GUARD-LEDGER.md row cites, and every row cites a file under `mechanisms/hooks/`.
+# `check_workstation_test.py` had fifteen passing tests and no runner at all -- which is this
+# corpus's own archetypal failure ("a check nothing runs is not a check"), sitting in the
+# directory that documents it.
+#
+# These suites are safe on a runner BY CONSTRUCTION, and that is the precondition for putting
+# them here: each builds its own fixtures in a temp directory and imports its subject relative to
+# the test file. None of them reads a hooks directory, a home directory or a sibling clone -- the
+# specific mistake GUARD-LEDGER.md records having shipped once, where a banked test silently
+# exercised an installed copy and went red on every CI push because a runner has no `~/.claude`.
+# A future test that needs a real machine does NOT belong in this job.
+#
+# NOTE, deliberately: this runs the comparator's TESTS. It does not run the comparator itself
+# against any real population -- see `tools/compare_mechanism_copies.py`'s "DELIBERATELY NOT WIRED
+# INTO ANY GATE" section. Gating on a known-divergent population reddens every commit over
+# unrelated work and gets bypassed; gating on whether the instrument still works does not.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tool-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run every tools/*_test.py
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          tests=(tools/*_test.py)
+          if [ ${#tests[@]} -eq 0 ]; then
+            echo "no tools/*_test.py found -- this job would report success having run nothing"
+            exit 2
+          fi
+          failed=0
+          for t in "${tests[@]}"; do
+            echo "=== $t ==="
+            python3 "$t" || failed=1
+          done
+          exit $failed
