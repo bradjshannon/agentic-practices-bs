@@ -29,7 +29,7 @@ def load():
 
 # (name, said, tool_results, tool_calls, want_block)
 CASES = [
-    # ---- POSITIVE: the sentences that cost Brad a round-trip ----
+    # ---- POSITIVE: the sentences that cost the operator a round-trip ----
     ("POS 1 the real NIMBE mic sentence",
      "Still unverified, and it's a hardware fact I can't settle from code: whether the two "
      "ES7210 M-slots are two physically distinct PCB mics.",
@@ -54,7 +54,7 @@ CASES = [
     ("NEG D a QUESTION, not an assertion",
      "Can I confirm the mic count from the datasheet, or is that unverified?",
      "grep", 1, False),
-    ("NEG E blockquoted -- Brad or a doc speaking",
+    ("NEG E blockquoted -- the operator or a doc speaking",
      "> the mic is unverified?\nI checked and it is a dual-mic board.",
      "grep", 1, False),
     ("NEG F no tool calls (pure conversation)",

@@ -16,7 +16,7 @@ wait spi download
 
 That observation was correct: the chip was in a download mode `esptool` cannot speak. From it I
 inferred a *cause* — that GPIO46 was being held high by something external on the board's expansion
-header, or by a pull-down resistor damaged in a recent solder rework. I told Brad to detach whatever
+header, or by a pull-down resistor damaged in a recent solder rework. I told the operator to detach whatever
 was on that header and power-cycle.
 
 He power-cycled. It came up fine. **And nothing had ever been attached to that header** — which

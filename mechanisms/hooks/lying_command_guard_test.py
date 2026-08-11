@@ -107,8 +107,8 @@ cases = [
     # replies.jsonl:
     ("BLOCK", 'python -c "import json; f=open(r\'replies.jsonl\', \'a\'); f.write(json.dumps({}))"'),
     ("BLOCK", "echo '{\"thread\": \"x\"}' >> conductors/iotta/replies.jsonl"),
-    ("ALLOW", "python tools/reply.py some-thread \"an answer for Brad\""),
-    ("ALLOW", "python tools/reply.py --to last \"an answer for Brad\""),
+    ("ALLOW", "python tools/reply.py some-thread \"an answer for the operator\""),
+    ("ALLOW", "python tools/reply.py --to last \"an answer for the operator\""),
     ("ALLOW", "wc -l conductors/iotta/replies.jsonl"),
     # THE EXEMPTION IS PER FILE. Naming pin-thread.py must not license a raw finds.jsonl write --
     # the whole reason the rule keys the exemption to each file's own writer.

@@ -3,7 +3,7 @@
 
 WHY
 ---
-Brad, 2026-07-20: *"new rule: workflows output repo-work to the repo."*
+The operator, 2026-07-20: *"new rule: workflows output repo-work to the repo."*
 
 The cost that produced the rule is measured, not hypothetical. A ~3.3M-token fan-out
 audit on 2026-07-19 found 19 "this exists in code but nothing consumes it" defects. Its
@@ -188,7 +188,7 @@ def main() -> int:
 
     reason = (
         "This turn ran a Workflow but wrote nothing into a repo.\n\n"
-        "RULE (Brad, 2026-07-20): workflows output repo-work to the repo.\n\n"
+        "RULE (the operator, 2026-07-20): workflows output repo-work to the repo.\n\n"
         "A run is a Prestige cycle -- the next agent carries over ONLY what is on disk "
         "in the repo. Transcripts and session artifacts do not survive. A 3.3M-token "
         "audit on 2026-07-19 found 19 real defects and banked none of them; they lived "

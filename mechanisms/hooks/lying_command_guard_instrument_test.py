@@ -16,10 +16,10 @@ g = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(g)
 
 CR = "$" + chr(39) + chr(92) + "r" + chr(39)          # $'\r' without letting a shell see it
-JSONPATH = '"{\\"transcript_path\\": \\"/c/Users/brad/t.jsonl\\"}"'
+JSONPATH = '"{\\"transcript_path\\": \\"/c/Users/user/t.jsonl\\"}"'
 
 cases = [
-    ("MUST FIRE  crlf grep",      f"grep -c {CR} /c/Users/brad/x.sh", True),
+    ("MUST FIRE  crlf grep",      f"grep -c {CR} /c/Users/user/x.sh", True),
     ("MUST FIRE  crlf grep piped", f"cat f | grep -c {CR}", True),
     ("MUST FIRE  json /c/ path",  f"echo {JSONPATH} | python h.py", True),
     ("must NOT   ordinary grep",  "grep -c foo file.txt", False),
@@ -28,7 +28,7 @@ cases = [
      'python -c "import pathlib;print(pathlib.Path(r\'C:/x\').read_bytes().count(b\'\\r\\n\'))"',
      False),
     ("must NOT   native win path in json",
-     'python -c "import json;print(json.dumps({\'p\': \'C:/Users/brad/t.jsonl\'}))"', False),
+     'python -c "import json;print(json.dumps({\'p\': \'C:/Users/user/t.jsonl\'}))"', False),
     ("must NOT   url inside json", 'curl -d \'{"url": "http://localhost:8000/x"}\' http://h', False),
 ]
 

@@ -61,7 +61,7 @@ QUESTION_BUDGET = BUDGET * 2
 OVERRIDE = re.compile(r"output-budget:\s*(ok|asked|artifact)\b", re.I)
 
 
-# A turn that ANSWERS a direct question is exempt. Brad, 2026-07-22: "the output budget hook
+# A turn that ANSWERS a direct question is exempt. The operator, 2026-07-22: "the output budget hook
 # needs to ignore ... instances of overriding it when i ask you questions. it was meant to
 # address the problem of returning to a session and having an hour of reading."
 # The target is UNPROMPTED volume -- status dumps, narration, the wall you come back to. An
@@ -114,7 +114,7 @@ def current_turn_text(transcript_path: str) -> tuple[str, str]:
         # A human message WITH ATTACHMENTS (screenshots, pasted files) is list-shaped, exactly
         # like a tool result — so the original string-only scan skipped it, walked further back
         # to an older message, and the question-exemption never saw the question. Observed
-        # 2026-07-22: Brad asked "what does this mean?" with two screenshots attached and the
+        # 2026-07-22: the operator asked "what does this mean?" with two screenshots attached and the
         # budget hook fired on the answer, which is the precise case the exemption exists for.
         #
         # The discriminator is the BLOCK TYPES, not the container: real human input carries
@@ -160,12 +160,12 @@ def main() -> int:
 
     # TWO DIFFERENT WINDOWS, deliberately — this is a decision, not an oversight.
     #
-    # MEASURE per message (the notification-bounded window above). Brad reads a message at a
+    # MEASURE per message (the notification-bounded window above). The operator reads a message at a
     # time, and a per-message cap is what keeps any single one skimmable.
     #
     # EXEMPT on the real human boundary. `current_turn_text` treats a background-task
     # notification as human input — measured: 25 notifications vs 37 genuine messages in one
-    # session — so the question-exemption was inspecting a notification instead of Brad's actual
+    # session — so the question-exemption was inspecting a notification instead of the operator's actual
     # question, and fired on the answer to "what does this mean?".
     #
     # Not switching the MEASUREMENT to the human boundary too, though it is tempting: cumulative
@@ -186,7 +186,7 @@ def main() -> int:
     # Answering a direct question RAISES the budget; it does not remove it.
     #
     # 2026-07-26: this exemption was `if is_question(human): return 0` -- unlimited length. It
-    # ate the entire control. Brad asks a question in most messages ("mechanical fix options?",
+    # ate the entire control. The operator asks a question in most messages ("mechanical fix options?",
     # "do i want them directly next to the OLED?", "are reassert failures a class of error?"),
     # so the cap never applied ONCE across a long session, and he ended up saying: "i'm already
     # regressing to reading through pages and pages of your output in chat. can't do it, not
@@ -231,10 +231,10 @@ def main() -> int:
     except Exception:
         pass
 
-    # ADVISORY, NOT BLOCKING (Brad, 2026-07-24: "you're repeating yourself in this chat").
+    # ADVISORY, NOT BLOCKING (the operator, 2026-07-24: "you're repeating yourself in this chat").
     #
     # This hook blocked until now. Blocking a Stop forces the agent to REWRITE the message --
-    # but the over-long original has already been shown to Brad, so he reads the whole thing
+    # but the over-long original has already been shown to the operator, so they read the whole thing
     # twice. A guard whose entire purpose is reducing what he reads was, every time it fired,
     # roughly DOUBLING it. It fired repeatedly in one session before he noticed and asked why
     # the chat was repeating itself.

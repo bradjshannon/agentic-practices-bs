@@ -18,3 +18,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Reject machine/project-specific leaks
         run: python3 tools/check_sanitized.py
+      # The same boundary, one axis over: check_sanitized.py rejects machine/host/project
+      # identifiers, and the operator's GIVEN NAME is not in its catalogue -- which is how 122
+      # occurrences across 42 of 151 tracked files sat in this PUBLIC repo with CI green until
+      # 2026-08-11. This repo has no .pre-commit-config.yaml, so CI is the only place to gate it.
+      # The checker's own suite is picked up separately by tool-tests.yml (it globs
+      # tools/*_test.py), and that suite carries the positive control -- gutting check_generic.py
+      # leaves THIS step green, so the two jobs are load-bearing together, not individually.
+      - name: Require generic phrasing (no personal name)
+        run: python3 tools/check_generic.py

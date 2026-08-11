@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Shared append-only log of hook FIRES — the raw data for measuring hook effectiveness.
 
-Brad, 2026-07-20: every hook fire that is valid should measure itself and surface whether it was
+The operator, 2026-07-20: every hook fire that is valid should measure itself and surface whether it was
 necessary. This is the collection layer. It records ONE thing: that a hook fired, on what trigger,
 in which session. It records NO verdict — a hook that logged "I was necessary" would be a tool
 asserting its own value, the exact misleading-report failure the whole philosophy warns against.

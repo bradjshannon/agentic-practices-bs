@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Track an agent's own wall-clock estimate against measured wall-clock reality.
 
-WHY THIS EXISTS (Brad, 2026-08-03): "Agents often claim work will take X hours/days, which is
+WHY THIS EXISTS (the operator, 2026-08-03): "Agents often claim work will take X hours/days, which is
 always based on human prediction heuristics that don't apply to agentic work. I want to measure
 agents' estimating accuracy, for fun." Not a safety control -- a measurement instrument. It must
 still be a hook and not a rule, for the same reason every other control here is: an agent asked to
 "estimate, then compare" will happily narrate having done so without the number ever being
 recorded before the outcome was known, which is worthless for calibration research.
 
-WHAT COUNTS AS "A CHUNK OF WORK": every dispatch through the `Agent` tool. Brad left the boundary
+WHAT COUNTS AS "A CHUNK OF WORK": every dispatch through the `Agent` tool. The operator left the boundary
 to my judgment. A subagent dispatch is the natural unit because it is the one place this harness
 already measures real wall-clock duration itself (`duration_ms` in the tool result and in the
 async completion notification) -- ungameable, since the agent being measured never produces that
@@ -35,7 +35,7 @@ STORAGE
   Pending/linked-but-not-yet-reconciled records: ~/.claude/state/estimate-registry-<session>.json
   (per-session, like revive_before_dispatch.py's registry).
   Finished comparisons: ~/.claude/state/estimate-results.jsonl (append-only, cross-session --
-  this is the actual dataset Brad wants to look at).
+  this is the actual dataset the operator wants to look at).
 
 INSTALL
   PreToolUse AND PostToolUse, matcher "Agent" (same two-half shape as revive_before_dispatch.py --

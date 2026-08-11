@@ -71,7 +71,7 @@ def _has_context(text: str) -> bool:
 #      source. The verbs and the ports were inside a grep PATTERN, i.e. data. This is the prose
 #      trap lying_command_guard.py's rule 5 documents ("a guard that punishes writing about its
 #      own patterns is one that gets disabled"), arriving here.
-#   2. A multi-line block whose FIRST line set `SCRATCH=".../C--Users-brad-Documents-GitHub-
+#   2. A multi-line block whose FIRST line set `SCRATCH=".../C--Users-<user>-Documents-GitHub-
 #      iotta-bs/.../newuser"` and whose LATER line ran `netstat ... | grep :8917`. The context
 #      signal came from a session scratchpad PATH on a different line -- `\biotta\b` matches
 #      `iotta-bs` because `-` is a word boundary. In THIS project every scratch path contains

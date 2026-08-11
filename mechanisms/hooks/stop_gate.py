@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Stop hook: run EVERY turn-end check and report ALL failures in ONE block.
 
-WHY THIS EXISTS — the hooks were multiplying Brad's reading, which is the opposite of the job
+WHY THIS EXISTS — the hooks were multiplying the operator's reading, which is the opposite of the job
 ------------------------------------------------------------------------------------------------
-Four separate Stop hooks were wired independently. Each one that blocks costs Brad a full
+Four separate Stop hooks were wired independently. Each one that blocks costs the operator a full
 re-read: the blocked message is **already rendered in his chat**, and then the rewrite lands
 next to it. Two hooks firing in sequence = the same content twice. Three = three times.
 
-Brad, 2026-07-22, with screenshots: *"[image]: duplicated output / [image2]: triplicate
+The operator, 2026-07-22, with screenshots: *"[image]: duplicated output / [image2]: triplicate
 output."*
 
 The `output_budget` hook is the sharpest version of the irony: it exists **solely** to reduce how
@@ -18,7 +18,7 @@ removal.
 THE FIX
 -------
 One gate, run once, that executes every check and concatenates their objections into a single
-block. The agent then rewrites **once**, so Brad reads at most two versions instead of four.
+block. The agent then rewrites **once**, so the operator reads at most two versions instead of four.
 
 This does NOT weaken the checks. Every one of them still blocks, still on the same rule, and
 still without the agent's participation. What changes is only that they speak together.
@@ -117,7 +117,7 @@ def main() -> int:
     # ⚠️ REPLY WITH THE DELTA, NOT THE MESSAGE AGAIN.
     #
     # This banner used to say "All of them, so you rewrite ONCE" — which correctly named the harm
-    # (Brad re-reading a message he has already seen) and then prescribed the thing that causes
+    # (the operator re-reading a message they have already seen) and then prescribed the thing that causes
     # it. An agent reading "rewrite" rewrites the whole message, so he reads two near-identical
     # versions. He caught it with a screenshot: two paragraphs boxed in red, near-verbatim, and
     # "why are you doing this".

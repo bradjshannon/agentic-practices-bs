@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PreToolUse(Bash) guard -- a subagent backgrounding a step will NOT be resumed by it.
 
-WHY THIS EXISTS (queued 2026-08-03, built 2026-08-04, Brad: "note this hook as a todo item.
+WHY THIS EXISTS (queued 2026-08-03, built 2026-08-04, the operator: "note this hook as a todo item.
 easy to sub out, probably." -- then "Do it").
 
 A subagent's turn ending IS its return to the parent; there is no mechanism that wakes a

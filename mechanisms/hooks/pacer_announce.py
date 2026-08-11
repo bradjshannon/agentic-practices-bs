@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """UserPromptSubmit hook: on a pacer FIRE, inject the heartbeat line directly into context.
 
-Brad, 2026-07-22/23: on every pacer fire, the agent should surface — in chat — the current ET
+The operator, 2026-07-22/23: on every pacer fire, the agent should surface — in chat — the current ET
 time, context %, and the status-page link. The voluntary version (agent reads the pacer's output
 file and relays it) decayed to ZERO: across an entire session the agent never once announced,
 because nothing forced it.
@@ -14,7 +14,7 @@ form the four-times-repeated prose rule could not be.
 
 FIRES ONLY on a fresh pacer fire — gated on `pacer-armed.json`'s `fires_at` having just gone
 past, deduped by that exact `fires_at`, and bounded to a 120 s window. So it does NOT inject on
-Brad's normal messages, on unrelated background completions, or twice for one fire.
+The operator's normal messages, on unrelated background completions, or twice for one fire.
 """
 import hashlib
 import json
@@ -27,7 +27,7 @@ from pathlib import Path
 STATE = Path.home() / ".claude" / "pacer-armed.json"
 SEEN = Path.home() / ".claude" / ".pacer-announced"
 
-# Brad, 2026-07-23: the status page lets him drop new decisions into the inbox MID-RUN, but
+# The operator, 2026-07-23: the status page lets them drop new decisions into the inbox MID-RUN, but
 # SessionStart (pending_instructions.py) only reads it at turn 0 -- anything entered after that
 # sits unread until the next session. This hook already fires every ~7 min on the pacer's
 # background completion and is already injected into context (see module docstring), so it is
@@ -146,7 +146,7 @@ def _new_inbox_lines(inbox_path=INBOX, state_path=INBOX_SURFACED) -> list[str]:
             # unhandled entry once. Self-retiring: only the new key is ever written.
             if key in state or _legacy_entry_key(e) in state:
                 continue
-            # DO NOT SURFACE THE TEXT BODY HERE. Brad's own fix, 2026-07-26:
+            # DO NOT SURFACE THE TEXT BODY HERE. The operator's own fix, 2026-07-26:
             #   "i would suggest having the hook NOT provide a preview of the data, except maybe an
             #    identifier or timestamp, and instead provide the command you should use for the
             #    complete read."
@@ -200,8 +200,8 @@ def main() -> int:
     if not any(cwd.startswith(os.path.normpath(r)) for r in CONDUCTOR_ROOTS):
         return 0  # pacer armed outside a conductor repo — not our heartbeat
 
-    # ── Brad's inbox is surfaced on EVERY wake, NOT only on a pacer fire ──────────────────
-    # Brad, 2026-07-24: "you're not picking up the stuff i do on the status page,
+    # ── The operator's inbox is surfaced on EVERY wake, NOT only on a pacer fire ──────────────────
+    # The operator, 2026-07-24: "you're not picking up the stuff i do on the status page,
     # automatically." He was right, and the cost was measured: SEVEN entries he typed into the
     # Ask boxes between 00:24 and 00:38 never reached the run. Every wake in that window was a
     # subagent completion or one of his own chat messages — and the inbox scan used to live
@@ -221,7 +221,7 @@ def main() -> int:
         # forward is the complete read.
         n = len(early_inbox)
         print("\n".join([
-            "[new status-page input from Brad — bodies NOT included by design]",
+            "[new status-page input from the operator — bodies NOT included by design]",
             *early_inbox,
             "",
             f"READ THE FULL TEXT before acting on any of it ({n} new). PowerShell, any directory:",
@@ -283,7 +283,7 @@ def main() -> int:
 
     # HISTORICAL NOTE — why the SIZE+MTIME version was rejected. Kept because the measurement
     # is still true and still rules that approach out.
-    # Brad, 2026-07-31: "you should check these things on pacer fire, for subagents", after a
+    # The operator, 2026-07-31: "you should check these things on pacer fire, for subagents", after a
     # dispatched agent sat dead for 4h08m while the conductor enforced constraints on its behalf.
     # The proposed tell was transcript SIZE + MTIME. It does not work: MEASURED the same hour,
     # every a<id>.output file in the session tasks dir is 0 bytes -- including agents that had
@@ -300,7 +300,7 @@ def main() -> int:
     # the block after the CONDUCTOR_ROOTS check). Anything new was already printed on the way in,
     # on this and every other wake. Do NOT re-add a scan here — _new_inbox_lines() marks entries
     # surfaced, so a second call in the same invocation returns nothing and would read as "no new
-    # input from Brad", which is exactly the silent-drop this hook exists to prevent.
+    # input from the operator", which is exactly the silent-drop this hook exists to prevent.
     print("\n".join(out))
     return 0
 

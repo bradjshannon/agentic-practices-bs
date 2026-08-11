@@ -9,12 +9,12 @@ and both times the answer was already in hand:
   * "whether the two ES7210 M-slots are two physically distinct PCB mics ... is a hardware fact
     I can't settle from code" -- about a mass-produced board sitting on the desk, with a
     published datasheet, brought up from scratch on this bench with each mic tested
-    individually, and ~2 weeks of the wakeword working. Brad: *"or the board sitting in front of
+    individually, and ~2 weeks of the wakeword working. The operator: *"or the board sitting in front of
     me, which has two mics on the pcba, and is a known, established, mass produced product on
     the market, with like specs and datasheets ???"* / *"we brought up this board from scratch
     and tested each mic ?!?!"*
   * "OMOBE's mic is unverified ... I can't currently confirm OMOBE captures audio at all" --
-    about an audio dev board that had been running voice turns and producing transcripts. Brad:
+    about an audio dev board that had been running voice turns and producing transcripts. The operator:
     *"what? are you crazy"*. That one was internally incoherent too: the same sentence noted
     that `mic_dbfs` reads floor on a WORKING mic, then used the floor reading to doubt the mic.
 
@@ -50,7 +50,7 @@ SCOPE GUARDS -- each is a false positive that would discredit the hook
     words. "the wire contract is unverified" must not fire.
   * The hedge and the hardware noun must be in the SAME SENTENCE. Proximity is the whole signal;
     a turn that hedges about one thing and mentions a mic elsewhere is not this defect.
-  * Blockquoted lines are ignored -- that is Brad or a doc speaking, not the agent asserting.
+  * Blockquoted lines are ignored -- that is the operator or a doc speaking, not the agent asserting.
   * A turn that ASKS rather than asserts is ignored (the sentence ends in `?`). Asking is the
     behaviour this hook wants to produce.
   * Only fires when the turn made >=1 tool call, matching evidence_with_claim: taxing a pure
@@ -118,7 +118,7 @@ _AUTHORITY = re.compile(
 
 
 def strip_blockquotes(text: str) -> str:
-    """Drop quoted lines -- Brad or a doc speaking, not the agent asserting."""
+    """Drop quoted lines -- the operator or a doc speaking, not the agent asserting."""
     return "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith(">"))
 
 
@@ -205,7 +205,7 @@ def main() -> int:
         "These boards are MASS-PRODUCED PRODUCTS. They have published datasheets, they were "
         "brought up from scratch on this bench with each peripheral tested individually, and "
         "they have weeks of operating history. Absence of a re-derivation is NOT evidence of "
-        "doubt -- and an UNVERIFIED tag reads to Brad as a real open question, costing him a "
+        "doubt -- and an UNVERIFIED tag reads to the operator as a real open question, costing them a "
         "round-trip to close something he already knows.\n\n"
         "Three authorities are owed before the tag, in order:\n"
         "  1. Is it a mass-produced product? Fetch the vendor datasheet / product page. Having "
@@ -217,7 +217,7 @@ def main() -> int:
         "datasheet > bring-up history and observed behaviour > board BSP/Kconfig (authoritative "
         "for SOFTWARE only) > repo docs/*.md snapshots > your recollection, which is not a "
         "source. Register: conductor-bs/conductors/iotta/hardware-facts.md\n\n"
-        "FIX: consult one of them and say \"established, per <source>\", or ASK Brad in one "
+        "FIX: consult one of them and say \"established, per <source>\", or ASK the operator in one "
         "line. Both are cheap. If the fact genuinely needs a meter or the board is genuinely "
         "undocumented, emit `hardware:unverified-ok` -- override use is LOGGED, including "
         "pre-emptive use, so decay is visible.\n\n"

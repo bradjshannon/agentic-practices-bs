@@ -30,7 +30,7 @@ from __future__ import annotations
 import json
 
 # A string-content user entry that is really machinery talking. Matched conservatively: these
-# markers are injected by the harness and do not occur in Brad's own prose.
+# markers are injected by the harness and do not occur in the operator's own prose.
 _MACHINE_MARKERS = (
     "<task-notification>",
     "[SYSTEM NOTIFICATION - NOT USER INPUT]",

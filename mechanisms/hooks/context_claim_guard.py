@@ -7,7 +7,7 @@ WHY THIS EXISTS
 run down on the strength of it. The real figure was 39%. Nothing was measured -- the numbers were
 produced by the feeling of a long session, which is exactly the thing an agent cannot sense. The
 brief already said "read it from your own transcript, never *feel* it"; that is Voluntary class
-and it decayed inside one run, in the direction that ends runs early. Brad's instruction, verbatim:
+and it decayed inside one run, in the direction that ends runs early. The operator's instruction, verbatim:
 
     "if you want to wind down, you have to state the context and provenance of that value, and
      provenance must be measured not guessed."
@@ -27,7 +27,7 @@ Two objections, deliberately narrow so this cannot become the guard that cries w
   B. WIND-DOWN BELOW THE GUN -- the turn asserts a wind-down while the measured figure is under
      WINDDOWN_GUN_PCT. Escape: `winddown:early <reason>`, which is auditable in the transcript.
 
-     This started life as "state the figure and its provenance", and Brad replaced it the same
+     This started life as "state the figure and its provenance", and the operator replaced it the same
      hour with something strictly better: *"instead of saying 'you need to measure that and say
      where you got it' we should make the hook check the context value, itself, and verify it's
      >49%."* That removes the prose chore entirely -- there is nothing to assert, nothing to
@@ -63,13 +63,13 @@ import sys
 
 TOLERANCE_PTS = 10.0
 
-# The wind-down start gun (Brad, 2026-08-01, lowered from 60%). Below this, a wind-down is
+# The wind-down start gun (the operator, 2026-08-01, lowered from 60%). Below this, a wind-down is
 # premature and the hook refuses it OUTRIGHT rather than asking for provenance -- see the
 # WHAT IT CHECKS note. Change this when the gun changes; it is the one number here that is policy.
 WINDDOWN_GUN_PCT = 50.0
 
 # Auditable escape, same shape as `# guard:ok` and `evidence:none`. A wind-down below the gun is
-# legitimate when Brad asks for one, when the work is genuinely finished, or in an emergency --
+# legitimate when the operator asks for one, when the work is genuinely finished, or in an emergency --
 # so the token requires a REASON after it, and its use is visible in the transcript forever.
 _EARLY_OK = re.compile(r"winddown:early\s+\S", re.I)
 
@@ -257,11 +257,11 @@ def main() -> int:
             f"The start gun is {WINDDOWN_GUN_PCT:.0f}%. You are at {truth:.0f}%, with "
             f"{WINDDOWN_GUN_PCT - truth:.0f} points of headroom before wind-down is even due -- "
             "so this is not a context decision, and the wind-down skill's Precondition 0 is "
-            "explicit that 'everything is blocked on Brad' and 'the queue looks drained' are NOT "
+            "explicit that 'everything is blocked on the operator' and 'the queue looks drained' are NOT "
             "triggers. They have been wrong every time.\n\n"
             "Before ending: name three things you considered and chose NOT to do. If you cannot "
             "list three, you have not looked. Go find real work.\n\n"
-            "If the wind-down is genuinely warranted anyway -- Brad asked for one, the work is "
+            "If the wind-down is genuinely warranted anyway -- the operator asked for one, the work is "
             "actually finished, or something is wrong -- say so explicitly with a reason:\n"
             "    winddown:early <your reason>\n"
             "That is logged and stays in the transcript."

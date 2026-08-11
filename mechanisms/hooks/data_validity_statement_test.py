@@ -5,7 +5,7 @@ Earned 2026-07-28. Across one session I reported, with numbers and tables:
   * "the same device dominates both sides"   -- true of all turns, FALSE of the subset I
     was actually comparing, where the before-sample was ~7 devices over two weeks and the
     after-sample was ONE device on ONE day.
-Brad caught both. Neither was a bad measurement -- both were correct numbers with an
+The operator caught both. Neither was a bad measurement -- both were correct numbers with an
 unstated comparability problem, which is the failure this check exists to surface.
 
 The ALLOW cases carry the weight: a check that fires on ordinary numbers gets disabled.
@@ -34,7 +34,7 @@ cases = [
     # -- MUST NOT FIRE ----------------------------------------------------------------
     # the same claim WITH the statement
     # The statement is a TEMPLATE: its own line, starting `Validity:`. Inline does NOT
-    # count -- a fixed shape is checkable, a phrase-detector is a hole (Brad, 2026-07-28).
+    # count -- a fixed shape is checkable, a phrase-detector is a hole (the operator, 2026-07-28).
     ("ALLOW", "Baseline p50 was 5187 ms; after, 1447 ms, a 3.7s improvement.\n" + VALID),
     ("BLOCK", "Baseline p50 was 5187 ms; after, 1447 ms, improved. " + VALID),  # inline
     # single measurements, no comparison -- the common case, must stay quiet

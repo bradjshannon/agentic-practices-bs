@@ -13,7 +13,7 @@ mechanical implementations. It names **nothing specific** — no machine, host, 
 or project/product. The *real, tactical* documentation — how to install and wire a mechanism on a
 particular box, what a specific machine actually has running, anything computer- or
 project-specific — lives in the private companion repo
-[`conductor-bs`](https://github.com/bradjshannon/conductor-bs) (Brad, 2026-07-23).
+[`conductor-bs`](https://github.com/bradjshannon/conductor-bs) (the operator, 2026-07-23).
 
 **This is enforced, not just asked.** CI runs [`tools/check_sanitized.py`](tools/check_sanitized.py)
 (see [`.github/workflows/sanitized.yml`](.github/workflows/sanitized.yml)) on every push and PR; a
@@ -52,7 +52,7 @@ lesson has a machine version, that version lives in `mechanisms/` and the lesson
 
 ## Who writes here
 
-**Every conductor, on every machine, on every run** (Brad, 2026-07-22: *"I want every conductor
+**Every conductor, on every machine, on every run** (the operator, 2026-07-22: *"I want every conductor
 to be able to write notes, process improvements, mechanisms, hooks, skills, scripts, etc. into
 that repo, so every other conductor can benefit on the next run."*).
 

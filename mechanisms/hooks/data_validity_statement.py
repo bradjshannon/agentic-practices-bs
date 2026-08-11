@@ -58,7 +58,7 @@ _TWO_NUMBERS = re.compile(r"[\d][\d.,]*\s*(ms|s\b|sec|%|x\b)?[^\n]{0,120}?[\d][\
 # ── satisfaction: an explicit line naming BOTH halves ────────────────────────────────────────
 # ANCHORED TO LINE START ON PURPOSE: this is a TEMPLATE, not a phrase to be detected.
 # The first version accepted `Validity:` anywhere, to avoid "false-positiving on a legitimate
-# inline form". Brad's correction (2026-07-28): if output needs templating to be testable,
+# inline form". The operator's correction (2026-07-28): if output needs templating to be testable,
 # template it. A fixed shape the author must emit is mechanically checkable and unambiguous;
 # a permissive matcher trying to recognise prose is neither, and every loosening of it is a
 # hole. The required shape is a line of its own:
