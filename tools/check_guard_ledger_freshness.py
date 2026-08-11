@@ -103,6 +103,24 @@ HOOKS_DIR = REPO / "mechanisms" / "hooks"
 LEDGER_ROW = re.compile(r"^\|\s*`mechanisms/hooks/[^`]+`", re.M)
 TEST_FILE = re.compile(r"`([A-Za-z0-9_./-]+_test\.py)`")
 
+# A row that cites no test file used to be counted and PRINTED as "no-test", then quietly
+# excluded from the failing set -- so it passed CI in silence. Measured 2026-08-11: two rows
+# banked that day (`inflight_claim_needs_census`, `hedge_demotion_guard`) BOTH read no-test,
+# purely because their author did not know the citation had to be in backticks. Each row's own
+# prose asserted "mutation-checked, both directions demonstrated" while nothing re-ran either
+# suite. That is this file's opening thesis reproduced inside its own reporting: a row asserting
+# verification that could not itself be verified, indistinguishable from one that was.
+#
+# So silence is no longer representable. A row without a cited test must SAY so, in the row:
+#
+#     NO-TEST: <why there is no banked suite>
+#
+# Cite a test, or declare why you cannot. Neither is a failure; only saying nothing is. The
+# declaration is deliberately free text rather than a bare token -- a one-word opt-out becomes a
+# standing header (this corpus has counts for that), whereas a written reason gets read by the
+# next author and can be argued with.
+NO_TEST_DECL = re.compile(r"NO-TEST:\s*\S", re.I)
+
 
 def _ledger_table_text() -> str:
     text = LEDGER.read_text(encoding="utf-8")
@@ -248,6 +266,7 @@ def main() -> int:
     coupled_rows: list[str] = []
     unrunnable_rows: list[str] = []
     unverifiable_rows: list[str] = []
+    undeclared_rows: list[str] = []
     verdicts: list[str] = []
 
     # Worst wins: a row citing one stale test and one unrunnable test is STALE, not UNRUNNABLE.
@@ -261,9 +280,16 @@ def main() -> int:
         label = _guard_label(row)
         cited = TEST_FILE.findall(row)
         if not cited:
-            unverifiable_rows.append(label)
-            verdicts.append(f"NO-TEST     {label}  (evidenced by live/manual observation only "
-                             f"-- cannot be auto-reverified)")
+            if NO_TEST_DECL.search(row):
+                # Declared, therefore visible and arguable. Still not auto-reverifiable, so it
+                # is reported every run rather than folded into the pass.
+                unverifiable_rows.append(label)
+                verdicts.append(f"NO-TEST     {label}  (declared in-row -- not auto-reverifiable)")
+            else:
+                undeclared_rows.append(label)
+                verdicts.append(
+                    f"UNDECLARED  {label}  cites no `*_test.py` and carries no `NO-TEST:` "
+                    f"declaration -- this row asserts verification nothing can re-check")
             continue
 
         worst = PASS
@@ -288,12 +314,13 @@ def main() -> int:
                             + "\n              ".join(row_detail))
 
     fresh = len(rows) - len(stale_rows) - len(coupled_rows) - len(unrunnable_rows) \
-        - len(unverifiable_rows)
+        - len(unverifiable_rows) - len(undeclared_rows)
     # One summary line, used by every exit path, so no path can report a partial picture. The
     # out-of-scope count is on it because a denominator the reader cannot see is not a denominator.
     summary = (f"{len(rows)} in-scope row(s): {fresh} fresh, {len(stale_rows)} stale, "
                f"{len(coupled_rows)} machine-coupled-or-vacuous, {len(unrunnable_rows)} unrunnable here, "
-               f"{len(unverifiable_rows)} no-test. "
+               f"{len(unverifiable_rows)} declared-no-test, "
+               f"{len(undeclared_rows)} UNDECLARED. "
                f"{out_of_scope} further ledger row(s) are OUTSIDE this script's scope "
                f"(the guard is not under mechanisms/hooks/) and were never checked.")
 
@@ -303,11 +330,11 @@ def main() -> int:
         print(summary)
         return 0
 
-    hard = stale_rows + coupled_rows + (unrunnable_rows if args.strict else [])
+    hard = stale_rows + coupled_rows + undeclared_rows + (unrunnable_rows if args.strict else [])
     if hard:
         print(f"GUARD-LEDGER.md: {len(hard)} row(s) failed:\n")
         for v in verdicts:
-            if v.startswith(("STALE", "COUPLED", "VACUOUS")) or (args.strict and v.startswith("UNRUNNABLE")):
+            if v.startswith(("STALE", "COUPLED", "VACUOUS", "UNDECLARED")) or (args.strict and v.startswith("UNRUNNABLE")):
                 print(v)
         print(f"\nFix, by verdict:")
         print(f"  STALE      -- re-verify the guard, update its row (evidence + Date), or remove "
@@ -317,6 +344,10 @@ def main() -> int:
               f"not own.")
         print(f"  VACUOUS    -- the cited test asserts nothing when run directly. Its green is not "
               f"evidence of anything, which is the failure this ledger opens with.")
+        print(f"  UNDECLARED -- the row cites no `*_test.py` and does not say why. Either cite the "
+              f"suite in backticks (that is how this script finds it), or add `NO-TEST: <reason>` "
+              f"to the row. Saying nothing used to pass silently, which is how two rows banked "
+              f"2026-08-11 claimed 'mutation-checked' while nothing re-ran them.")
         if args.strict:
             print(f"  UNRUNNABLE -- this environment cannot run the test (no checkout, no "
                   f"harness). Not a ledger defect. Run without --strict to ignore.")
