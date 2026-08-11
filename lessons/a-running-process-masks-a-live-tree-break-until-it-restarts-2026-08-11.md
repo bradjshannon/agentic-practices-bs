@@ -1,8 +1,13 @@
 # A running process masks a live-tree break until something restarts it
 
-**2026-08-11.** An agent was mid-merge on a shared kernel module (`conductorkit/core.py`) consumed
-by a second repo **through a live tree** — no package boundary, no version pin, the file on disk is
-what the consumer imports. Its intermediate state had an unmatched `}`.
+**2026-08-11. Measured window: 3 min 15 s.** An agent ran `git merge --no-commit` on a shared kernel
+module (`conductorkit/core.py`) consumed by a second repo **through a live tree** — no package
+boundary, no version pin, the file on disk is what the consumer imports. Two of the three conflict
+markers landed in *code* rather than inside docstrings, so the module stopped parsing.
+
+The specific trap is `--no-commit`: **it leaves the consumer broken for the entire resolution
+window, which is however long thinking takes.** The right shape is to resolve in a scratch worktree
+and land the result as one atomic write.
 
 Measured from the consumer at that moment:
 
@@ -46,7 +51,10 @@ underneath a bind mount.
   original outage.
 - **Add a cold check beside the warm one.** The render probe answers "is it serving?"; you also need
   "would a fresh process come up?" — a bare import, or a generation into a scratch path. They fail
-  independently and only the second sees this class.
+  independently and only the second sees this class. Here that is literally
+  `python -c "import conductorkit.core"` against the live tree: milliseconds, and nothing runs it.
+- **Resolve conflicts in a scratch worktree, not in the tree the consumer reads.** `--no-commit`
+  merges publish every intermediate state you pass through.
 - **Treat a half-resolved conflict in shared source as an outage in progress**, not as ordinary
   work-in-progress. The window is not "until I finish"; it is "until something restarts", which is
   not under the author's control.
