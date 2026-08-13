@@ -42,6 +42,29 @@ It works for a build lot, a commit lot, a flash lot. It returns a confident fals
 The conductor never noticed it had made that assumption, which is why the check felt like
 evidence rather than like a guess.
 
+## ⚠️ SECOND INSTANCE, SAME RUN, ~90 MINUTES AFTER THIS FILE WAS COMMITTED
+
+The same conductor killed a second working agent. **It had followed this lesson's letter** — it
+probed with `SendMessage` and received `Message queued for delivery at its next tool round`, the
+reply that means *running*. It then went and collected artifact evidence anyway (a tool-call
+marker frozen at 40 for 90 minutes, low CPU on every candidate process) and killed on that. The
+agent's dying words were mid-work: five logging test cases passing, moving to the next site.
+
+**So the rule above was not strong enough, because it names the wrong step.** The failure was not
+skipping the probe. It was *continuing to gather evidence after the probe had already answered*,
+and letting the weaker evidence win. That feels like diligence from the inside. It is looking for
+permission.
+
+**The stronger rule: the probe's answer is the verdict. Artifact evidence does not overturn it.**
+Once `SendMessage` says running, the agent is running — a stale marker, an idle CPU and an empty
+git status are all consistent with a long call and none of them is a second opinion. If you find
+yourself assembling a case against a probe result you already have, stop: you have decided and are
+now shopping for support.
+
+One instrument fact that fell out, worth having on its own: **the per-agent tool-call marker can
+freeze while an agent works.** It sat at 40 for 90 minutes across demonstrable activity. Do not
+treat marker staleness as data about an agent at all.
+
 ## The rule
 
 **A required milestone line that never arrives is the finding. Chase the missing milestone;
