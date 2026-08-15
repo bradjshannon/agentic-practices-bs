@@ -87,6 +87,101 @@ def _docker_on_path() -> bool:
     return shutil.which("docker") is not None
 
 
+def check_flash(raw: str):
+    """Rule 7, split out of `check()` on purpose: raw esptool/idf.py flash primitives vs
+    tools\\flash-device.ps1.
+
+    THE REQUIREMENT, before the mechanism: an agent about to flash a board must be routed to
+    flash-device.ps1 at the moment it TYPES a flashing primitive, not after -- and never by
+    raising an approval card at the operator. flash-device.ps1's own header states the reason
+    precisely: "A COM port is NEVER trusted as a board's identity: this script only probes (a)
+    the port docs\\device-roster.md documents for THIS device's own MAC suffix, or (b) an
+    explicit -Port hint -- and even then only after esptool read_mac confirms the MAC suffix
+    matches." A hand-driven esptool/idf.py call has none of that -- it trusts whatever port
+    string it is given, including a stale docs\\device-roster.md row.
+
+    MEASURED 2026-08-13: a firmware lot's brief did not name flash-device.ps1. It tried
+    `idf.py flash`, hit the permission classifier, and RETRIED with raw `esptool write_flash`
+    for the same intent -- the retry-with-rephrase pattern this estate forbids elsewhere in this
+    file (see rule 6's OTA primitives). That call succeeded and wrote the WRONG board, trusting
+    a stale docs\\device-roster.md COM-port row instead of a verified MAC. A second raw esptool
+    call later raised an approval card that blocked the operator's session. The prose rule
+    already existed twice (this script's own header, docs\\TOOLS-index.md) and failed on an
+    agent that had read neither -- the Voluntary-class failure this whole file exists to fix.
+
+    WHY THIS IS ITS OWN FUNCTION, CALLED STANDALONE AGAINST THE POWERSHELL TOOL (see `main()`),
+    UNLIKE EVERY OTHER RULE IN THIS FILE. Measured directly, 2026-08-13, against 1,431 real
+    PowerShell-tool command snippets logged on this machine (`~/.claude/hook-events.jsonl`):
+    naively widening `check()`'s whole rule set to the PowerShell tool would have made rule 4b
+    (the bare-unchecked-`cd` rule) fire on 192 of them (13%) -- almost every ordinary PowerShell
+    script here opens with `cd "<repo>"` on its own line followed by more commands with no
+    `&&`/`;` chaining, which is RELIABLE in PowerShell (one script, one process, sequential
+    statements) and is exactly the shape rule 4b was written to catch because it is NOT reliable
+    across SEPARATE Bash-tool calls. That rule's own rationale is specific to Bash's cross-call
+    cwd-loss gap; applied to a single coherent PowerShell script it is simply wrong, at a rate
+    that would get the whole hook disabled within a day and take this rule's true positives with
+    it. None of `check()`'s other ~10 rules have been measured against real PowerShell text at
+    all. So ONLY this one rule -- narrow, already re-derived from first principles for a
+    Windows-native tool, and the one this task actually needs to fire on the dominant real
+    invocation channel -- runs against PowerShell. Everything else keeps running against Bash
+    only, unchanged, until each rule gets its own measurement pass.
+
+    WHY THIS CANNOT BLOCK flash-device.ps1's OWN CHILD PROCESSES: a PreToolUse hook only ever
+    sees the TEXT of the tool call an agent issues, never a subprocess an already-running script
+    spawns. `& "...\\flash-device.ps1" -Board X -Device Y` is ONE tool call whose text contains
+    neither "esptool" nor "idf.py" -- the script's internal `idf.py -B $BuildDir -p $Port
+    app-flash` (Invoke-UsbFlash) and its internal `esptool ... read_mac` (Invoke-EsptoolReadMac)
+    both run as CHILD PROCESSES of that already-running pwsh process, invisible to any
+    PreToolUse hook by construction -- the exact same reason rule 6's OTA checks never fire on
+    ota-push.ps1's own internal `idf.py build` call. Verified directly against this file's test
+    suite (the wrapper's own two invocation shapes are ALLOW fixtures in
+    lying_command_guard_flash_test.py).
+
+    `esptool read_mac`/`chip_id` are DELIBERATELY NOT matched -- they are the read-only identity
+    check this whole mechanism wants an agent doing BEFORE it ever touches a port, and
+    flash-device.ps1 itself makes exactly this call. The trigger requires `write_flash` (or the
+    `idf.py ... flash` verb) alongside the tool invocation, never the bare tool name.
+
+    `erase_flash` is DELIBERATELY NOT included. flash-device.ps1 has no erase step at all --
+    verified by reading the whole script: it deploys a specific BUILT image via ota-push.ps1 +
+    `idf.py app-flash`; nothing in it calls `erase_flash`. Blocking `erase_flash` and naming
+    flash-device.ps1 as the fix would name a command that does not do what was asked -- the
+    exact "block naming no valid alternative gets worked around" failure the commit_verify rule
+    in `check()` exists to avoid. A raw `erase_flash` carries the identical COM-port-trust hazard
+    and deserves its own rule with its own correct replacement, not a reuse of this message.
+
+    SURFACE: heredoc bodies removed, nested -c/-Command payloads unwrapped (a real command, not
+    data -- same reasoning as rule 6), and quote CHARACTERS (not their content) deleted for THIS
+    rule's own matching pass only. A quoted span here is virtually always a WINDOWS PATH needing
+    quotes for a venv's python.exe, not prose DATA, so removing just the quote marks turns
+    `"E:\\...\\python.exe" -m esptool` into a plain token stream a simple anchored regex can match
+    without special-casing where each quote closes. The COMMAND-POSITION anchor (identical to
+    rule 6's `_OTA_CLI`) is what still keeps a quoted commit-message SENTENCE containing these
+    words silent: deleting its quote marks does not move "esptool" to a segment boundary, so
+    `git commit -m "docs: use esptool write_flash carefully"` stays a no-fire.
+    """
+    problems = []
+    visible = (HEREDOC.sub(" ", raw) + " ; " + HEREDOC.sub(" ", nested_payloads(raw))
+              ).replace('"', " ").replace("'", " ")
+    if _FLASH_ESPTOOL.search(visible) or _FLASH_IDF.search(visible):
+        problems.append((
+            "A raw esptool/idf.py flash primitive, invoked directly. A firmware lot bypassed "
+            "flash-device.ps1 exactly this way on 2026-08-13 -- `idf.py flash` hit the permission "
+            "classifier, it retried with raw `esptool write_flash` for the same intent, and that "
+            "wrote the WRONG board by trusting a stale docs\\device-roster.md COM-port row instead "
+            "of a verified MAC. A second raw esptool call later raised an approval card that "
+            "blocked the operator's session.",
+            "Use the wrapper -- it verifies MAC-vs-roster before touching a port, and a "
+            "hand-driven primitive does not:\n"
+            "      tools\\flash-device.ps1 -Board <board> -Device <device> [-DryRun]\n"
+            "    `esptool read_mac`/`chip_id` (read-only identity checks) are NOT blocked -- do "
+            "those freely. If this is genuinely outside flash-device.ps1's contract (e.g. "
+            "flashing a non-myproject image such as the ESP-IDF reference example), append "
+            "`# guard:ok`.",
+        ))
+    return problems
+
+
 def check(cmd: str, run_in_background: bool = False):
     """Return a list of (problem, fix) for a command string.
 
@@ -727,6 +822,12 @@ def check(cmd: str, run_in_background: bool = False):
                 "`# guard:ok`.",
             ))
 
+    # ── 7. THE FLASH-DEVICE PATH: raw esptool/idf.py primitives vs the ONE correct way in ──────
+    # See `check_flash()` below (split out of this function deliberately -- read its own
+    # docstring for why: it is the ONE rule in this file also run standalone against the
+    # PowerShell tool, and every other rule here is NOT, because they are measurably wrong there).
+    problems.extend(check_flash(raw))
+
     return problems
 
 
@@ -828,6 +929,45 @@ _OTA_WRAPPER_FILE = re.compile(
 _OTA_WRAPPER_RELATIVE = re.compile(
     r"(?:^|[;&|\n]|&&|\|\|)\s*&?\s*"
     r"(?:\.{1,2}[\\/]|(?<![\w/\\:.-])tools[\\/])[^\s'\";|&]*ota-(?:deliver|push)\.ps1",
+    re.I | re.M,
+)
+
+
+# ── Rule 7: the flash-device path ────────────────────────────────────────────────────────────
+# Anchored at shell-segment start exactly like `_OTA_CLI` above, tolerant of env assignments and
+# a PowerShell call-operator `&`, with an optional PATH PREFIX before the tool token -- required
+# here (unlike `_OTA_CLI`) because a real esptool invocation on this estate is virtually always a
+# full path to one venv's python.exe (`E:\Espressif\python_env\idf5.3_py3.12_env\Scripts\
+# python.exe`), never the bare word `python`. Matched against a surface with quote CHARACTERS
+# deleted (see the block comment in `check()`), so the path prefix pattern never needs to reason
+# about where a quote opens or closes.
+#
+# THREE SHAPES, matching the three ways esptool is actually invoked here: bare `esptool`/
+# `esptool.py`/`esptool.exe` (optionally path-prefixed), `python ... esptool.py` (older
+# standalone-script form, launcher + a SEPARATE path to the script), and `python ... -m esptool`
+# (the modern package form -- the one this box's tooling actually uses per
+# `Invoke-EsptoolReadMac`'s own comment on why 3.12/`-m esptool` replaced a broken 3.11/
+# `esptool.py`-as-a-script env). `write_flash` must appear later in the SAME segment -- this is
+# what keeps `esptool read_mac`/`chip_id` (the read-only identity checks this mechanism WANTS an
+# agent making) silent; see requirement 2 in the task that added this rule.
+_FLASH_ESPTOOL = re.compile(
+    r"(?:^|[;&|\n]|&&|\|\|)\s*(?:\w+=\S+\s+)*(?:&\s*)?"
+    r"(?:\S*[\\/])?"
+    r"(?:"
+    r"(?:python(?:3)?|py)(?:\.exe)?\b(?:\s+-\d\S*)?\s+"
+    r"(?:-m\s+esptool\b|(?:\S*[\\/])?esptool\.py\b)"
+    r"|esptool(?:\.py|\.exe)?\b"
+    r")"
+    r"[^;&|\n]*\bwrite_flash\b",
+    re.I | re.M,
+)
+# `idf.py ... flash` -- narrower than the existing `_IDF_SLOW` (rule N+2) on purpose: that rule
+# also matches `build`/`monitor` because ITS concern is wall-clock, not port safety, and neither
+# of those touches a port. This rule's concern IS port safety, so only `flash` (which also catches
+# `app-flash`/`bootloader-flash` -- the hyphen is a word boundary, same as `_IDF_SLOW`) qualifies.
+_FLASH_IDF = re.compile(
+    r"(?:^|[;&|\n]|&&|\|\|)\s*(?:\w+=\S+\s+)*(?:&\s*)?"
+    r"(?:\S*[\\/])?idf\.py\b[^;&|\n]*\bflash\b",
     re.I | re.M,
 )
 
@@ -990,7 +1130,14 @@ def main() -> int:
     except Exception:
         return 0  # never block on a malformed payload
 
-    if payload.get("tool_name") != "Bash":
+    # Bash gets every rule in `check()`, unchanged. PowerShell gets ONLY `check_flash()` (rule 7)
+    # -- see that function's own docstring for the measurement that makes this asymmetry
+    # deliberate rather than an oversight: `check()`'s other rules assume Bash's cross-call
+    # cwd-loss semantics and are wrong, at a measured 13% false-positive rate on real historical
+    # PowerShell commands, for at least one of them (rule 4b). Any tool_name other than these two
+    # is a no-op, same as before this branch existed.
+    tool_name = payload.get("tool_name")
+    if tool_name not in ("Bash", "PowerShell"):
         return 0
     tool_input = payload.get("tool_input") or {}
     cmd = tool_input.get("command") or ""
@@ -999,22 +1146,25 @@ def main() -> int:
     if OVERRIDE.search(cmd):
         return 0  # explicitly overridden; the token is the audit record
 
-    # `run_in_background` is a Bash tool PARAMETER, not part of the command string, and the
-    # offload rule's whole remedy is "set it" -- so the rule has to be able to see that it is
-    # already set. MEASURED 2026-08-08 before that rule was written, because if the field were
-    # absent the rule would fire identically on correct and incorrect behaviour and had to be
-    # abandoned: `subagent_background_wait_guard.py` (line ~140) gates on exactly
-    # `tool_input.get("run_in_background")` and reaches its reminder only past that gate -- and
-    # it demonstrably fires on backgrounded calls and stays silent on foreground ones carrying
-    # the same `# bg:ok` override text. The field is present, under `tool_input`.
-    problems = check(cmd, run_in_background=bool(tool_input.get("run_in_background")))
+    if tool_name == "Bash":
+        # `run_in_background` is a Bash tool PARAMETER, not part of the command string, and the
+        # offload rule's whole remedy is "set it" -- so the rule has to be able to see that it is
+        # already set. MEASURED 2026-08-08 before that rule was written, because if the field
+        # were absent the rule would fire identically on correct and incorrect behaviour and had
+        # to be abandoned: `subagent_background_wait_guard.py` (line ~140) gates on exactly
+        # `tool_input.get("run_in_background")` and reaches its reminder only past that gate --
+        # and it demonstrably fires on backgrounded calls and stays silent on foreground ones
+        # carrying the same `# bg:ok` override text. The field is present, under `tool_input`.
+        problems = check(cmd, run_in_background=bool(tool_input.get("run_in_background")))
+    else:
+        problems = check_flash(cmd)
     if not problems:
         return 0
 
     try:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import hook_log
-        hook_log.record("lying_command_guard", trigger=(cmd or "")[:120])
+        hook_log.record("lying_command_guard", trigger=(cmd or "")[:120], payload=payload)
     except Exception:
         pass
     print("Blocked: this command shape returns a plausible WRONG answer.\n", file=sys.stderr)
