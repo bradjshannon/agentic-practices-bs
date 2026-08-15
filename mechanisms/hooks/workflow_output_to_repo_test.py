@@ -174,6 +174,75 @@ r = run([
 ], conf=None)
 results.append(check("no config -> fallback still recognises a repo write", r, False))
 
+# ── The EFFECT check (added 2026-07-22): "did the repo change on disk", not "did a
+# Write/Edit tool_use with a repo file_path appear in THIS transcript". Proves the git-
+# status path is actually wired, not merely present -- a subagent write or a Bash
+# heredoc never shows up as a tracked Write/Edit block, which is exactly what the old
+# transcript-only scan missed (see the module docstring's FALSE POSITIVE/NEGATIVE case).
+# WORKFLOW_OUTPUT_REPO_ROOTS pins the roots directly so these cases test repo_changed()
+# itself, not the cwd/blob mining that finds roots in the first place.
+import subprocess as _sp
+
+
+def _git(*args, cwd):
+    _sp.run(["git", "-C", cwd] + list(args), capture_output=True, check=True)
+
+
+EFFECT_REPO = tempfile.mkdtemp(prefix="wotr-effect-")
+_git("init", "-q", cwd=EFFECT_REPO)
+_git("config", "user.email", "test@example.com", cwd=EFFECT_REPO)
+_git("config", "user.name", "test", cwd=EFFECT_REPO)
+with open(os.path.join(EFFECT_REPO, "seed.txt"), "w") as fh:
+    fh.write("seed\n")
+_git("add", "-A", cwd=EFFECT_REPO)
+_git("commit", "-q", "-m", "seed", cwd=EFFECT_REPO)
+
+
+def run_with_roots(entries, roots, stop_active=False):
+    env_extra = {"WORKFLOW_OUTPUT_REPO_ROOTS": roots}
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False,
+                                     encoding="utf-8") as fh:
+        fh.write("\n".join(entries))
+        path = fh.name
+    env = dict(os.environ)
+    env.update(env_extra)
+    env["WORKFLOW_OUTPUT_REPOS_CONF"] = CONF_PATH
+    try:
+        payload = {"transcript_path": path, "stop_hook_active": stop_active}
+        p = subprocess.run([sys.executable, HOOK], input=json.dumps(payload),
+                           capture_output=True, text=True, env=env)
+        out = (p.stdout or "").strip()
+        return json.loads(out) if out else None
+    finally:
+        os.unlink(path)
+
+
+# MUST NOT FIRE: no Write/Edit tool_use at all, but the pinned repo root has an
+# UNCOMMITTED change on disk -- exactly what a Bash heredoc or a subagent write leaves
+# behind and the old transcript-only scan could never see.
+with open(os.path.join(EFFECT_REPO, "seed.txt"), "a") as fh:
+    fh.write("changed by the effect check test\n")
+r = run_with_roots([
+    user_msg("audit via bash heredoc"),
+    entry("assistant", [{"type": "tool_use", "name": "Workflow", "input": {}}]),
+    entry("assistant", [{"type": "text", "text": "Wrote findings via a heredoc, no Edit "
+                         "tool_use block for it."}]),
+], roots=EFFECT_REPO)
+results.append(check("effect check: uncommitted repo change with NO tracked write -> quiet", r,
+                     False))
+
+# Reset the repo to clean (revert the change above) before the negative control.
+_git("checkout", "--", "seed.txt", cwd=EFFECT_REPO)
+
+# MUST FIRE: same pinned repo root, but genuinely clean -- the effect check must not
+# invent a change that is not there.
+r = run_with_roots([
+    user_msg("audit via bash heredoc"),
+    entry("assistant", [{"type": "tool_use", "name": "Workflow", "input": {}}]),
+    entry("assistant", [{"type": "text", "text": "Ran the audit, wrote nothing anywhere."}]),
+], roots=EFFECT_REPO)
+results.append(check("effect check: repo genuinely clean -> BLOCKS", r, True))
+
 os.unlink(CONF_PATH)
 
 print()
