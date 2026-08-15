@@ -12,6 +12,13 @@ import sys
 import tempfile
 import pathlib
 
+# Telemetry isolation -- keep this suite OUT of the live ~/.claude/hook-events.jsonl, the
+# one file that says whether a hook works. Must be set before any hook runs; subprocesses
+# inherit it. Any new hook test needs these two lines. See hook_log.log_path().
+os.environ["HOOK_LOG_PATH"] = os.path.join(
+    tempfile.mkdtemp(prefix="hooklog-test-"), "events.jsonl")
+
+
 # Load the guard SITTING NEXT TO THIS TEST, not whichever copy happens to be installed. This
 # file is banked in mechanisms/hooks/ AND installed to ~/.claude/hooks/; with a hardcoded install
 # path the banked copy silently tested the installed copy, so a regression in the banked copy

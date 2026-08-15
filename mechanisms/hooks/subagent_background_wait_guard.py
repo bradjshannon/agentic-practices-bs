@@ -133,6 +133,15 @@ def main():
     except Exception:
         return allow()
 
+    # `_log()` is reached from deep in the logic without the payload, so bind it here. Without
+    # this every fire records `session: null` and hook_rollup.py can classify none of them.
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import hook_log
+        hook_log.bind(payload)
+    except Exception:
+        pass
+
     try:
         if payload.get("tool_name") != "Bash":
             return allow()

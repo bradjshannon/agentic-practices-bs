@@ -21,6 +21,13 @@ import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+# Telemetry isolation -- keep this suite OUT of the live ~/.claude/hook-events.jsonl, the
+# one file that says whether a hook works. Must be set before any hook runs; subprocesses
+# inherit it. Any new hook test needs these two lines. See hook_log.log_path().
+os.environ["HOOK_LOG_PATH"] = os.path.join(
+    tempfile.mkdtemp(prefix="hooklog-test-"), "events.jsonl")
+
+
 HOOK = Path(__file__).with_name("agent_activity.py")
 _spec = importlib.util.spec_from_file_location("agent_activity", HOOK)
 m = importlib.util.module_from_spec(_spec)

@@ -62,6 +62,16 @@ def allow():
 
 
 def deny(reason):
+    # Bank the block BEFORE emitting it -- see estimate_tracker.deny(). A block that leaves no
+    # trace is invisible to hook_rollup.py, which is the instrument that decides whether this
+    # guard is worth its cost. Never raises and never alters the verdict below.
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import hook_log
+        hook_log.record("revive_before_dispatch", trigger=str(reason)[:120],
+                        extra={"decision": "deny"})
+    except Exception:
+        pass
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
@@ -195,6 +205,13 @@ def main():
         payload = json.load(sys.stdin)
     except (ValueError, OSError):
         return allow()
+    # So deny(), which is not given the payload, can still resolve the session.
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import hook_log
+        hook_log.bind(payload)
+    except Exception:
+        pass
     try:
         if (payload.get("tool_name") or "") != "Agent":
             return allow()

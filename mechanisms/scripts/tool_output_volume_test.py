@@ -41,13 +41,14 @@ check(
 check("non-dict response is not spooled", spool_info("plain text"), (False, None))
 
 # -- End-to-end through handle_post, with hook_log redirected into a scratch file so the real
-# ~/.claude/hook-events.jsonl is never touched. hook_log reads LOG_PATH inside record(), and
-# sys.modules caching means the module object this test patches is the same one the hook imports.
-import hook_log  # noqa: E402
+# ~/.claude/hook-events.jsonl is never touched. This used to monkeypatch hook_log.LOG_PATH, which
+# worked only because the hook runs IN-PROCESS here; HOOK_LOG_PATH is the estate-wide mechanism
+# (hook_log.log_path() re-reads it per call) and also covers subprocesses. Same file either way.
+import hook_log  # noqa: E402,F401
 
 with tempfile.TemporaryDirectory() as tmp:
     log_path = os.path.join(tmp, "hook-events.jsonl")
-    hook_log.LOG_PATH = log_path
+    os.environ["HOOK_LOG_PATH"] = log_path
 
     def rows():
         if not os.path.isfile(log_path):

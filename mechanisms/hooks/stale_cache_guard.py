@@ -43,6 +43,16 @@ def allow():
 
 
 def deny(reason):
+    # Bank the block BEFORE emitting it -- see estimate_tracker.deny(). A block that leaves no
+    # trace is invisible to hook_rollup.py, which is the instrument that decides whether this
+    # guard is worth its cost. Never raises and never alters the verdict below.
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import hook_log
+        hook_log.record("stale_cache_guard", trigger=str(reason)[:120],
+                        extra={"decision": "deny"})
+    except Exception:
+        pass
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
@@ -109,6 +119,13 @@ def _find_source(cache_path):
 def main():
     raw = sys.stdin.read()
     data = json.loads(raw) if raw.strip() else {}
+    # So deny(), which is not given the payload, can still resolve the session.
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import hook_log
+        hook_log.bind(data)
+    except Exception:
+        pass
     tool = data.get("tool_name") or ""
     ti = data.get("tool_input") or {}
 

@@ -15,6 +15,14 @@ Run: python hardware_hedge_guard_test.py    (exit 0 = all pass, 1 = something fa
 import importlib.util
 import os
 import sys
+import tempfile
+
+# Telemetry isolation -- keep this suite OUT of the live ~/.claude/hook-events.jsonl, the
+# one file that says whether a hook works. Must be set before any hook runs; subprocesses
+# inherit it. Any new hook test needs these two lines. See hook_log.log_path().
+os.environ["HOOK_LOG_PATH"] = os.path.join(
+    tempfile.mkdtemp(prefix="hooklog-test-"), "events.jsonl")
+
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 

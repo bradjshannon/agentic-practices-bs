@@ -9,6 +9,13 @@ Run:  py -3 ~/.claude/hooks/evidence_with_claim_test.py
 import os
 import runpy
 import sys
+import tempfile
+
+# Telemetry isolation -- keep this suite OUT of the live ~/.claude/hook-events.jsonl, the
+# one file that says whether a hook works. Must be set before any hook runs; subprocesses
+# inherit it. Any new hook test needs these two lines. See hook_log.log_path().
+os.environ["HOOK_LOG_PATH"] = os.path.join(
+    tempfile.mkdtemp(prefix="hooklog-test-"), "events.jsonl")
 
 H = runpy.run_path(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "evidence_with_claim.py"))
@@ -87,7 +94,7 @@ check(
 
 check(
     "no load-bearing claim at all",
-    evaluate("Flashed NIMBE and started the build; I'll check telemetry next.",
+    evaluate("Flashed VAMPS and started the build; I'll check telemetry next.",
              "idf.py build\n...", calls=4)[0],
     False,
 )
@@ -101,7 +108,7 @@ check(
 
 check(
     "'unverified' must not trip the verification pattern",
-    evaluate("DURIN's AFE path is unverified; COM7 was never connected this run.",
+    evaluate("KEDMA's AFE path is unverified; COM7 was never connected this run.",
              "some tool output", calls=1)[0],
     False,
 )

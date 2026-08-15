@@ -178,6 +178,17 @@ def allow_redacted(tool_input, prompt):
 
 
 def deny(reason):
+    # Bank the block BEFORE emitting it. A blocking hook that leaves no trace cannot be asked
+    # "how often do you fire, and are you earning your place" -- measured 2026-08-13, 5 of 5
+    # subagent dispatches in one fan-out were blocked here and none appeared in hook-events.jsonl.
+    # Never raises and never alters the verdict below.
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import hook_log
+        hook_log.record("estimate_tracker", trigger=str(reason)[:120],
+                        extra={"decision": "deny"})
+    except Exception:
+        pass
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
@@ -390,6 +401,13 @@ def main():
         payload = json.load(sys.stdin)
     except (ValueError, OSError):
         return allow()
+    # So deny(), which is not given the payload, can still resolve the session.
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import hook_log
+        hook_log.bind(payload)
+    except Exception:
+        pass
     try:
         event = payload.get("hook_event_name") or ""
         if event == "Stop":
