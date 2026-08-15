@@ -12,6 +12,13 @@ The ALLOW cases carry the weight: a check that fires on ordinary numbers gets di
 """
 import os
 import runpy
+import tempfile
+
+# Telemetry isolation -- keep this suite OUT of the live ~/.claude/hook-events.jsonl, the
+# one file that says whether a hook works. Must be set before any hook runs; subprocesses
+# inherit it. Any new hook test needs these two lines. See hook_log.log_path().
+os.environ["HOOK_LOG_PATH"] = os.path.join(
+    tempfile.mkdtemp(prefix="hooklog-test-"), "events.jsonl")
 
 # Resolve RELATIVE to this file, like the sibling mechanism tests: a test that loads the
 # module from ~/.claude would pass while THIS repo's copy was broken -- a test that cannot
