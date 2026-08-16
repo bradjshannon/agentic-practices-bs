@@ -1,0 +1,53 @@
+# Local CI gate for agentic-practices-bs.
+#
+#   pre-commit install     # NOT run automatically -- see below
+#
+# NOT INSTALLED BY ANYTHING IN THIS REPO. This file is configuration; it is inert until
+# someone runs `pre-commit install` in their own clone, which writes .git/hooks/pre-commit.
+# Nothing here wires itself into a user's environment.
+#
+# WHY THIS FILE EXISTS AT ALL, given this repo's CI has always been GitHub Actions
+# (.github/workflows/*.yml), not pre-commit: docs/TOOLS-index.md's generator
+# (conductor-bs/tools/gen_tools_index.py) lives in the PRIVATE conductor-bs kit, which a public
+# GitHub Actions runner never has checked out -- gating a public repo's CI on a private sibling
+# repo's contents would be the exact interdependency this generator's own design note (see its
+# module docstring, "ONE INDEX PER REPO, ONE GENERATOR") rules out. So this repo's index can
+# only be checked where the sibling clone is actually present: a developer's own machine. Same
+# constraint, same answer, as conductor-pub and iotta-firmware -- both public/public-adjacent
+# repos whose tools-index hook is pre-commit-only for this identical reason, verified by reading
+# their .pre-commit-config.yaml and confirming neither's *.yml workflow reruns it.
+#
+# THE GENERATOR IS NOT COPIED HERE, AND ITS ABSENCE IS A SKIP, NOT A FAILURE. It lives in
+# conductor-bs/tools/gen_tools_index.py and serves five repos from that one location; copying it
+# per-repo would be exactly the kind of silent fork this kit polices elsewhere
+# (conductor-pub/tests/test_status_page_lineage_parity.py, tools/sp-parity-check.py). So the hook
+# reaches for the sibling clone and, when there is no sibling -- the normal case for anyone who
+# cloned only this repo, plus every CI runner and every worktree -- prints why and exits 0.
+#
+# `--scan-dir tools --scan-dir mechanisms/scripts`, UNLIKE THE OTHER FOUR REPOS. This repo's
+# real tooling lives under mechanisms/scripts/ (commit_verify.py among them), not tools/ --
+# gen_tools_index.py's default (`tools/` only) would silently produce an index that omits the
+# tool it exists to make findable. The other four repos pass no --scan-dir and get the default;
+# this is the one repo that needs the flag, which is why it is spelled out here rather than
+# assumed.
+#
+# That skip is the whole design. An adopter with one clone is never blocked, and this repo's
+# index content and commit-ability never depend on another repo's contents. Regenerate by hand:
+#   python ../conductor-bs/tools/gen_tools_index.py --repo . --scan-dir tools --scan-dir mechanisms/scripts --fix
+# and if you have no conductor-bs, read the tools' own header text directly -- that is all the
+# index is.
+
+repos:
+  - repo: local
+    hooks:
+      - id: tools-index
+        name: tooling index drift (docs/TOOLS-index.md)
+        entry: >-
+          bash -c 'g=../conductor-bs/tools/gen_tools_index.py; if [ -f "$g" ]; then
+          python "$g" --repo . --scan-dir tools --scan-dir mechanisms/scripts; else
+          echo "tools-index SKIPPED -- $g not present (the generator lives in the
+          private kit; nothing to check against here)"; fi'
+        language: system
+        files: '^(tools/.*\.(py|ps1|sh)|mechanisms/scripts/.*\.(py|ps1|sh)|docs/TOOLS-index\.md)$'
+        pass_filenames: false
+        stages: [pre-commit]
