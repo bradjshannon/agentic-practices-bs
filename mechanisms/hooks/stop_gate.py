@@ -54,6 +54,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # Order matters only for readability of the combined message: cheapest/most-structural first.
 CHECKS = [
     "requirement_before_mechanism.py",
+    "command_shape_guard.py",
     "workflow_output_to_repo.py",
     "evidence_with_claim.py",
     "data_validity_statement.py",
