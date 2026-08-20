@@ -250,9 +250,48 @@ def stale_cards() -> tuple[str, str | None]:
         return "", f"could not run the stale-card report: {exc}"
 
 
+def _size_tag(path: str) -> str:
+    """Rough token cost of opening this file, as `21k` / `<1k` / `?`.
+
+    ── WHY A SIZE SITS BESIDE EVERY INDEXED FILENAME (2026-08-20) ────────────────────────────
+    The index exists so a run can decide WHICH file to open. Until now a ```primed-dirs``` entry
+    rendered as a bare filename, so the one fact that decides that -- what the read costs -- was
+    the one fact absent. `decisions.md` (11k) and `decisions-archive.md` (359k) appeared as two
+    indistinguishable lines; so did `STATUS-digest.md` (<1k) and `STATUS.md` (93k).
+
+    That is not a priming-volume problem, which is the smallest lever there is
+    (`agentic-practices-bs/lessons/priming-reduction-is-the-weakest-of-four-levers-2026-08-20.md`
+    ranks it 4th of 4). It is a TOOL-RESULT-VOLUME problem, which is lever #2: a misdirected read
+    of a 359k-token archive is not a one-time cost, it is re-read by every later request in the
+    session. The whole annotation added here costs ~500 tokens once and defends against that.
+
+    Estimated as bytes/4 and labelled as an estimate. Derived from the file on disk, so it cannot
+    drift the way a hand-written "(large)" note would -- nobody has to remember to update it.
+    """
+    try:
+        n = os.path.getsize(path) // 4
+    except OSError:
+        return "?"
+    return f"{n // 1000}k" if n >= 1000 else "<1k"
+
+
 def guidance_index() -> tuple[list[tuple[str, list[str], str | None]], list[str], str | None]:
-    """(dir entries, named files, manifest note)."""
+    """(dir entries, named files, manifest note).
+
+    A ```primed-files``` entry whose path falls INSIDE a ```primed-dirs``` directory is rendered
+    on that directory's own line (marked `>`), not repeated in the trailing "named files" block.
+    Two reasons, both measured: the label was landing ~100 lines away from the filename it
+    describes, where it could not inform the read decision it exists for; and the brief, the
+    needs-you file and the hardware-facts file were each being printed twice.
+
+    This is also how the manifest now expresses "indexed, but do NOT read this one" -- a labelled
+    entry rather than an exclusion. See PRIMING.md's Rules for why exclusion was rejected: an
+    exclude list and a split directory both move membership from automatic to remembered, and
+    hiding a hazardous file also hides the warning from the run that finds it with `ls` anyway.
+    """
     dirs, files, note = _parse_manifest()
+    labels = {rel.replace("\\", "/"): label for rel, label in files}
+    claimed: set[str] = set()
     out = []
     for rel, label in dirs:
         path = os.path.join(GH, rel.replace("/", os.sep))
@@ -265,11 +304,25 @@ def guidance_index() -> tuple[list[tuple[str, list[str], str | None]], list[str]
         except Exception as exc:
             out.append((f"{rel} — {label}", [], f"unreadable: {exc}"))
             continue
-        out.append((f"{rel} — {label}", names, None if names else "empty (suspicious)"))
+        rows = []
+        width = min(max((len(n) for n in names), default=0), 44)
+        for n in names:
+            key = f"{rel.rstrip('/')}/{n}"
+            flabel = labels.get(key)
+            if flabel:
+                claimed.add(key)
+            mark = ">" if flabel else "-"
+            row = f"{mark} {n.ljust(width)} {_size_tag(os.path.join(path, n)).rjust(5)}"
+            rows.append(f"{row}  {flabel}" if flabel else row)
+        out.append((f"{rel} — {label}", rows, None if names else "empty (suspicious)"))
     named = []
     for rel, label in files:
-        exists = os.path.exists(os.path.join(GH, rel.replace("/", os.sep)))
-        named.append(f"{'   ' if exists else '!! MISSING '}{rel} — {label}")
+        if rel.replace("\\", "/") in claimed:
+            continue  # already shown, with this label, on its directory's line above
+        full = os.path.join(GH, rel.replace("/", os.sep))
+        exists = os.path.exists(full)
+        size = f" [{_size_tag(full)}]" if exists else ""
+        named.append(f"{'   ' if exists else '!! MISSING '}{rel}{size} — {label}")
     return out, named, note
 
 
@@ -292,11 +345,13 @@ def print_guidance() -> None:
         if note:
             print(f"      !! {note}")
         for f in files:
-            print(f"      - {f}")
+            print(f"      {f}")
     if named:
-        print("   named files:")
+        print("   named files (outside the folders above):")
         for n in named:
             print(f"   {n}")
+    print("   Sizes are ESTIMATED token cost (bytes/4) — they are what the read will cost you,")
+    print("   not a ranking. `>` marks a file the manifest labels; read its label before opening.")
     print("   Read the ones relevant to what you are about to do. They are short, they are")
     print("   failure-earned, and every one exists because something went wrong without it.")
 
