@@ -315,19 +315,24 @@ def main() -> int:
 
     fresh = len(rows) - len(stale_rows) - len(coupled_rows) - len(unrunnable_rows) \
         - len(unverifiable_rows) - len(undeclared_rows)
-    # One summary line, used by every exit path, so no path can report a partial picture. The
-    # out-of-scope count is on it because a denominator the reader cannot see is not a denominator.
+    # One summary line, used by every exit path, so no path can report a partial picture.
     summary = (f"{len(rows)} in-scope row(s): {fresh} fresh, {len(stale_rows)} stale, "
                f"{len(coupled_rows)} machine-coupled-or-vacuous, {len(unrunnable_rows)} unrunnable here, "
                f"{len(unverifiable_rows)} declared-no-test, "
-               f"{len(undeclared_rows)} UNDECLARED. "
-               f"{out_of_scope} further ledger row(s) are OUTSIDE this script's scope "
-               f"(the guard is not under mechanisms/hooks/) and were never checked.")
+               f"{len(undeclared_rows)} UNDECLARED.")
+    # A COULD-NOT-CHECK bucket, kept OFF the pass/fail summary line above (a denominator that
+    # silently shrinks the "in-scope" count reads as a clean pass) and printed to stderr on every
+    # exit path so it cannot sit quietly beside a green run -- this repo's own doctrine about an
+    # unchecked bucket next to an otherwise-authoritative summary.
+    coverage_gap = (f"COVERAGE GAP: {out_of_scope} further ledger row(s) are OUTSIDE this "
+                     f"script's scope (the guard is not under mechanisms/hooks/) and were "
+                     f"never checked.")
 
     if args.list:
         print("\n".join(verdicts))
         print()
         print(summary)
+        print(coverage_gap, file=sys.stderr)
         return 0
 
     hard = stale_rows + coupled_rows + undeclared_rows + (unrunnable_rows if args.strict else [])
@@ -353,6 +358,7 @@ def main() -> int:
                   f"harness). Not a ledger defect. Run without --strict to ignore.")
         print()
         print(summary)
+        print(coverage_gap, file=sys.stderr)
         return 1
 
     if unrunnable_rows:
@@ -361,6 +367,7 @@ def main() -> int:
               f"environment (exit 2 = 'not run', which is not a pass): "
               + ", ".join(unrunnable_rows))
     print(summary)
+    print(coverage_gap, file=sys.stderr)
     return 0
 
 

@@ -4,7 +4,7 @@ into PowerShell by a Windows operator?
 
 WHY THIS EXISTS
 ----------------
-Brad, three messages in about two minutes, 2026-08-15: "you've GOT TO STOP giving me powershell
+The operator, three messages in about two minutes, 2026-08-15: "you've GOT TO STOP giving me powershell
 commands with the wrong slashes" / "it wastes turns EVERY TIME" / "EVERY powershell command I
 have to tell you to fix it."
 
@@ -17,7 +17,7 @@ Each violation names the exact replacement -- a block that says only "don't do t
 block (this estate's own rule).
 
 Deliberately NARROW, matching the defect classes actually measured on the live board
-(conductors/iotta/finds.jsonl `command` field, 2026-08-15):
+(this estate's own conductor transcript log, `command` field, 2026-08-15):
   1. a Windows drive-letter path written with forward slashes (`C:/Users/...`)
   2. a piped POSIX-only filter command (`tail`, `head`, `grep`, `sed`, `awk`, `wc`, `cat`)
   3. `2>/dev/null` (or any `/dev/null` redirect target -- doesn't exist on Windows)

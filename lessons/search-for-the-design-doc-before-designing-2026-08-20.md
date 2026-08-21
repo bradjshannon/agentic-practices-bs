@@ -1,6 +1,6 @@
 # Search for the design doc before designing — the answer is often already on disk, with the fork already answered
 
-**2026-08-20, IAI-Smart Xiaozhi estate, server conductor run 58.**
+**2026-08-20, a voice-assistant server estate, server conductor run 58.**
 
 ## Symptom
 

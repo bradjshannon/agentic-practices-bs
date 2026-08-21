@@ -13,7 +13,7 @@
 # repo's contents would be the exact interdependency this generator's own design note (see its
 # module docstring, "ONE INDEX PER REPO, ONE GENERATOR") rules out. So this repo's index can
 # only be checked where the sibling clone is actually present: a developer's own machine. Same
-# constraint, same answer, as conductor-pub and iotta-firmware -- both public/public-adjacent
+# constraint, same answer, as conductor-pub and this estate's firmware repo -- both public/public-adjacent
 # repos whose tools-index hook is pre-commit-only for this identical reason, verified by reading
 # their .pre-commit-config.yaml and confirming neither's *.yml workflow reruns it.
 #

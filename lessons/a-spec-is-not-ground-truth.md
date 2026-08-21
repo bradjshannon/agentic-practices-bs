@@ -4,8 +4,8 @@
 defect: the model set a heater to 80°F while the prompt said the valid range was "140 to 200". I
 filed it INCORRECT, twice, with the prompt quoted as the authority.
 
-**What actually happened.** The prompt was wrong. 140–200°F is an air-fryer *cooking* range that
-had been copy-pasted into a *room fan* agent, along with its burn warnings. 80°F is a correct
+**What actually happened.** The prompt was wrong. 140–200°F is a different appliance's *cooking*
+range that had been copy-pasted into a *room fan* agent, along with its burn warnings. 80°F is a correct
 room-air target, and the device accepted it — which was in my own evidence the whole time. The
 model was right and the specification was the defect. The human caught it; my self-checks could
 not have, because every check I ran validated against the same bad document.
