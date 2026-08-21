@@ -5,28 +5,29 @@ of retail buyers the day after it was "fixed", on the server that had the fix
 
 ## Symptom
 
-A product bug: a **fan** appliance referred to itself as an **air fryer** in its spoken replies. A
-tester reported it. It was investigated, six source files carrying air-fryer wording were found and
-corrected, the fix was deployed and verified live, and the issue was recorded as fixed.
+A product bug: a **fan** appliance referred to itself as **a different appliance model** in its
+spoken replies. A tester reported it. It was investigated, six source files carrying the other
+appliance's wording were found and corrected, the fix was deployed and verified live, and the
+issue was recorded as fixed.
 
-**The next day the fan said "Voice control is now turned on for your air fryer" to a room of retail
-buyers**, on the very server that had received the fix. The senior buyer asked why the product did
-not know what it was.
+**The next day the fan said "Voice control is now turned on for your [other appliance]" to a room
+of retail buyers**, on the very server that had received the fix. The senior buyer asked why the
+product did not know what it was.
 
 ## What actually happened
 
 The defect was a **class**: "product-specific wording reachable by the wrong product." The fix was
 applied to a **list**: the six files someone found that afternoon.
 
-There were more. A later sweep — searching every language variant (`air fryer`,
-`freidora`, `friteuse`, 空气炸锅) across the whole plugin and core tree rather than a known file
-list — found further instances immediately, including in tool descriptions never examined the first
-time and non-English strings in a file whose English string *had* been corrected.
+There were more. A later sweep — searching every language's rendering of the other appliance's
+name across the whole plugin and core tree rather than a known file list — found further
+instances immediately, including in tool descriptions never examined the first time and
+non-English strings in a file whose English string *had* been corrected.
 
 The first fix was not careless. It was verified: deployed, container restarted, strings confirmed
 live. **Every verification step passed, because each one verified the list.** The postcondition
 checked was "are those six files fixed", and they were. The postcondition that mattered was "can a
-fan still say air fryer", and nobody asked it.
+fan still misname itself", and nobody asked it.
 
 ## The rule
 
@@ -51,7 +52,7 @@ asserts specific values passes while the general property is broken. The same th
 element of the list.
 
 The tell is the shape of the bug report versus the shape of the change: a report that says "the fan
-called itself an air fryer" describes a behaviour; a change that says "edited six files" describes
+called itself the wrong product" describes a behaviour; a change that says "edited six files" describes
 an inventory. **Whenever the change is an inventory and the bug is a behaviour, ask what enumerated
 the inventory** — and whether that enumeration is guaranteed complete or merely what one person
 found before they stopped looking.

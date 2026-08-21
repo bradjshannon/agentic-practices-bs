@@ -89,13 +89,30 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("host", re.compile(r"iaismart\.com")),
     ("private-ip", re.compile(r"\b47\.23\.90\.\d{1,3}\b")),
     ("private-ip", re.compile(r"\b10\.100\.\d{1,3}\.\d{1,3}\b")),
-    ("project", re.compile(r"iai-xiaozhi", re.IGNORECASE)),
+    ("project", re.compile(r"iai[\s-]xiaozhi", re.IGNORECASE)),
     ("project", re.compile(r"\bxiaozhi\b", re.IGNORECASE)),
     ("project", re.compile(r"\bai-research-bs\b", re.IGNORECASE)),
-    ("project", re.compile(r"esp32-server", re.IGNORECASE)),
-    ("project", re.compile(r"\bairfryer\b", re.IGNORECASE)),
-    ("project", re.compile(r"\bheymars\b", re.IGNORECASE)),
-    ("project", re.compile(r"IAI-Smart")),
+    ("project", re.compile(r"esp32[\s-]server", re.IGNORECASE)),
+    # ── THE ONE-WORD-TOKEN CLASS, widened 2026-08-21 ────────────────────────────────────────
+    # Found by adversarial review: `\bairfryer\b` (one word, exact) is satisfied by prose that
+    # spells the same product as TWO words -- `air fryer` -- which is the ordinary way to write
+    # it and is exactly what leaked (lessons/fix-the-class-not-the-list-2026-08-14.md, five
+    # times). A checker keyed to one spelling of a product name is the same narrowness this
+    # catalogue's own `operator-path` entry already learned from (found 2026-08-11: keyed on
+    # the other workstation's username and missed this one). Audited every OTHER `project`
+    # entry for the same shape:
+    # `heymars` (a wake phrase, plausibly written "Hey Mars") and `IAI-Smart` (plausibly written
+    # without the hyphen) get the same `[\s-]?`/`[\s-]` treatment below, prophylactically -- no
+    # spaced-variant leak of those found in this tree today, but the whole point of "fix the
+    # class, not the list" is not waiting for the leak to prove the pattern first.
+    # `iai-xiaozhi`/`esp32-server` (immediately above) got the same widening for the same reason.
+    # `ai-research-bs` was left exact: it is a repo slug, always hyphenated in practice, and a
+    # spaced-out variant risks colliding with the generic phrase "ai research" followed by
+    # unrelated prose -- widening it would trade a real (if remote) false-positive for a leak
+    # that has never been observed.
+    ("project", re.compile(r"\bair[\s-]?fryer\b", re.IGNORECASE)),
+    ("project", re.compile(r"\bhey[\s-]?mars\b", re.IGNORECASE)),
+    ("project", re.compile(r"IAI[\s-]?Smart")),
     # ── The catalogue hole that made this whole check ornamental ────────────────────────────
     # Found 2026-08-11: the docstring above says this repo "must never name a specific machine,
     # host, operator, or project/product", and the catalogue duly banned five project names --
