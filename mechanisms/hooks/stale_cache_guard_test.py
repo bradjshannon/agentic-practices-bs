@@ -49,13 +49,13 @@ src = os.path.expanduser("~/Documents/GitHub/conductor-bs/skills/conductor-windd
 if os.path.isfile(cache) and os.path.isfile(src):
     denied, out = run("Read", {"file_path": cache})
     check("REAL: reading the stale cached winddown skill is DENIED", denied)
-    check("REAL:  and the block names the source path", src.replace("\\", "/") in out.replace("\\\\", "/").replace("\\", "/"))
+    check("REAL: and the block names the source path", src.replace("\\", "/") in out.replace("\\\\", "/").replace("\\", "/"))
 
     denied, _ = run("Bash", {"command": f"sed -n '1,40p' {cache}"})
     check("REAL: reading it via Bash is DENIED too", denied)
 
     denied, _ = run("Bash", {"command": f"sed -n '1,40p' {cache}  # cache:ok"})
-    check("REAL:  but '# cache:ok' lets a deliberate read through", not denied)
+    check("REAL: but '# cache:ok' lets a deliberate read through", not denied)
 
     denied, _ = run("Read", {"file_path": src})
     check("POSITIVE: reading the SOURCE is allowed", not denied)

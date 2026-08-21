@@ -82,6 +82,17 @@ def _cache_paths_in(text):
     return out
 
 
+def _repo_name_from_cache_path(parts):
+    """The plugin/repo name embedded in a cache path (…/plugins/cache/<owner>/<repo>/<ver>/…),
+    or None if the path doesn't have that shape. Used only to disambiguate — never required."""
+    for marker in ("cache",):
+        if marker in parts:
+            idx = parts.index(marker)
+            if idx + 2 < len(parts):
+                return parts[idx + 2]
+    return None
+
+
 def _find_source(cache_path):
     """Find an editable counterpart for a cached file.
 
@@ -101,6 +112,7 @@ def _find_source(cache_path):
     for n in (3, 2):                          # skills/<name>/SKILL.md, then <name>/SKILL.md
         if len(parts) >= n:
             tails.append("/".join(parts[-n:]))
+    repo_name = _repo_name_from_cache_path(parts)
     for root in SOURCE_ROOTS:
         if not os.path.isdir(root):
             continue
@@ -111,7 +123,21 @@ def _find_source(cache_path):
                     and os.path.isfile(h)]
             if len(hits) == 1:
                 return hits[0]
-            if len(hits) > 1:                # ambiguous: prefer the newest, but say so
+            if len(hits) > 1:
+                # Ambiguous: multiple repos/worktrees under SOURCE_ROOTS happen to share this
+                # tail (e.g. a second clone or a worktree of the same repo). Measured 2026-08-21:
+                # an unrelated `wave-worktrees/<other>` copy was newer than the canonical repo
+                # and "prefer the newest" silently named the wrong source. Prefer the hit whose
+                # top-level directory under `root` matches the repo name recovered from the
+                # CACHE path itself -- that is the one the cache actually came from, independent
+                # of which copy happens to be freshest.
+                if repo_name:
+                    named = [h for h in hits
+                             if os.path.relpath(h, root).replace("\\", "/").split("/")[0]
+                             == repo_name]
+                    if len(named) == 1:
+                        return named[0]
+                # Still ambiguous (or no repo name to key on): fall back to newest, as before.
                 return max(hits, key=lambda h: os.path.getmtime(h))
     return None
 
