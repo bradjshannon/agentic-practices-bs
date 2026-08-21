@@ -1,6 +1,6 @@
 # A guard built for the automatic path also vetoes the human one
 
-*2026-08-12, iotta — merged, then noticed within the hour by an unrelated lot.*
+*2026-08-12, a device-firmware project — merged, then noticed within the hour by an unrelated lot.*
 
 ## Symptom
 

@@ -1,6 +1,6 @@
 # An error message names a subsystem — check whether the timing even permits it
 
-**2026-08-20, IAI-Smart Xiaozhi estate (S2), server conductor run 58.**
+**2026-08-20, a voice-assistant server estate (S2), server conductor run 58.**
 
 ## Symptom
 

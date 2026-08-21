@@ -1,6 +1,6 @@
 # A test that asserts freshness against a hardcoded date detonates on a date nobody chose
 
-**2026-08-18, iotta.** A green suite went red with no commit behind it.
+**2026-08-18, a device-firmware project.** A green suite went red with no commit behind it.
 
 ## What happened
 

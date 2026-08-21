@@ -18,7 +18,7 @@ not know what it was.
 The defect was a **class**: "product-specific wording reachable by the wrong product." The fix was
 applied to a **list**: the six files someone found that afternoon.
 
-There were more. A later sweep — searching every language variant (`air fryer`, `airfryer`,
+There were more. A later sweep — searching every language variant (`air fryer`,
 `freidora`, `friteuse`, 空气炸锅) across the whole plugin and core tree rather than a known file
 list — found further instances immediately, including in tool descriptions never examined the first
 time and non-English strings in a file whose English string *had* been corrected.

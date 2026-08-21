@@ -17,7 +17,7 @@ silently omitted ten tools across the four repos — including five analyzers th
 being cited as the example of tooling nobody can find.
 
 **`.py`, `.ps1`, and `.sh`** are catalogued. PowerShell was added 2026-08-11; `.py`-only
-was never a decision, and it hid `iotta-firmware`'s entire bench workflow (build, flash,
+was never a decision, and it hid the firmware repo's entire bench workflow (build, flash,
 OTA push/deliver, the flash gate) from the one page meant to surface it. `.sh` was added
 2026-08-16 for the same reason one step further: `tools/archive-elf.sh` is called by the
 flash gate and OTA push SPECIFICALLY because it propagates a real exit code where the
