@@ -84,7 +84,9 @@ def _cache_paths_in(text):
 
 def _repo_name_from_cache_path(parts):
     """The plugin/repo name embedded in a cache path (…/plugins/cache/<owner>/<repo>/<ver>/…),
-    or None if the path doesn't have that shape. Used only to disambiguate — never required."""
+    or None if the path doesn't have that shape. When it fails to recover a usable name, the
+    caller does NOT fall back to a silent guess -- it returns `_Ambiguous` and states the gap.
+    A failure here is a visible could-not-disambiguate, not a safe no-op."""
     for marker in ("cache",):
         if marker in parts:
             idx = parts.index(marker)
@@ -93,11 +95,24 @@ def _repo_name_from_cache_path(parts):
     return None
 
 
+class _Ambiguous:
+    """Sentinel: more than one candidate source exists and this guard could not tell which one
+    the cache actually came from. Distinct from `None` ("no counterpart, cache is the only
+    copy") -- ambiguity must never be silently treated as either "one clear source" or "no
+    source", because either reading lets a wrong or stale answer through without saying so."""
+
+    def __init__(self, hits):
+        self.hits = hits
+
+
 def _find_source(cache_path):
     """Find an editable counterpart for a cached file.
 
     Matches on the tail of the path (…/skills/<name>/SKILL.md), not just the basename --
     every skill's file is called SKILL.md, so a basename match would collide constantly.
+
+    Returns a single path (str), `None` (no counterpart exists), or an `_Ambiguous` instance
+    (more than one candidate, and the repo-name check below could not narrow it to one).
     """
     norm = os.path.normpath(cache_path).replace("\\", "/")
     parts = [p for p in norm.split("/") if p]
@@ -124,21 +139,30 @@ def _find_source(cache_path):
             if len(hits) == 1:
                 return hits[0]
             if len(hits) > 1:
-                # Ambiguous: multiple repos/worktrees under SOURCE_ROOTS happen to share this
-                # tail (e.g. a second clone or a worktree of the same repo). Measured 2026-08-21:
-                # an unrelated `wave-worktrees/<other>` copy was newer than the canonical repo
-                # and "prefer the newest" silently named the wrong source. Prefer the hit whose
-                # top-level directory under `root` matches the repo name recovered from the
-                # CACHE path itself -- that is the one the cache actually came from, independent
-                # of which copy happens to be freshest.
+                # Ambiguous: multiple repos happen to carry a file at this same tail. This is a
+                # PERMANENT condition here, not a fluke of one run: `conductor-pub` carries its
+                # own `skills/conductor-winddown/SKILL.md` (441 lines) alongside conductor-bs's
+                # (325 lines), filed as a known finding in f848fa0 (2026-08-09) -- "prefer the
+                # newest" picked conductor-pub's copy over the canonical conductor-bs one, and
+                # named the wrong source in the guard's own block message. (A second, transient
+                # confounder -- an unrelated `wave-worktrees/<other>` clone -- was ALSO present
+                # when this was re-measured 2026-08-21, but removing it does not remove the
+                # ambiguity: conductor-pub alone reproduces the same wrong pick.)
+                #
+                # Prefer the hit whose top-level directory under `root` matches the repo name
+                # recovered from the CACHE path itself -- that is the one the cache actually came
+                # from, independent of which copy happens to be freshest.
                 if repo_name:
                     named = [h for h in hits
                              if os.path.relpath(h, root).replace("\\", "/").split("/")[0]
                              == repo_name]
                     if len(named) == 1:
                         return named[0]
-                # Still ambiguous (or no repo name to key on): fall back to newest, as before.
-                return max(hits, key=lambda h: os.path.getmtime(h))
+                # Still ambiguous: no repo name to key on, or it didn't narrow to one. Do NOT
+                # silently fall back to "prefer newest" -- that is the exact bug above, just
+                # moved one level down. Return the sentinel so the caller states the ambiguity
+                # instead of guessing.
+                return _Ambiguous(hits)
     return None
 
 
@@ -175,8 +199,24 @@ def main():
         if not os.path.isfile(cache_path):
             continue
         src = _find_source(cache_path)
-        if not src:
+        if src is None:
             continue                          # no counterpart: the cache IS the only copy
+        if isinstance(src, _Ambiguous):
+            # Cannot verify freshness against a source we cannot name -- and cannot claim it is
+            # safe to read either, since one of the candidates DOES exist and might genuinely be
+            # stale. State the ambiguity rather than picking one (the original bug) or staying
+            # silent (a could-not-check that reads as a pass, this corpus's other named failure).
+            candidates_list = "\n".join(f"    - {h}" for h in src.hits)
+            deny(
+                "Blocked: that path is a PLUGIN CACHE copy, and MULTIPLE editable candidates "
+                "exist for it -- this guard could not tell which one the cache actually came "
+                "from, so it cannot verify the cache is fresh.\n\n"
+                f"  cache: {cache_path}\n"
+                f"  candidates:\n{candidates_list}\n\n"
+                "Identify the correct source yourself and read it directly, or append "
+                "'# cache:ok' to a Bash command if you genuinely need the cached copy."
+            )
+            continue
         if _digest(src) == _digest(cache_path):
             continue                          # identical content; reading either is fine
         c_m, s_m = os.path.getmtime(cache_path), os.path.getmtime(src)

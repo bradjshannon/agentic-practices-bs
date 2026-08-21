@@ -72,11 +72,34 @@ check("POSITIVE: a cached file with no editable counterpart is allowed", not den
 
 # --- POSITIVE: identical content must not block -------------------------------------------
 if os.path.isfile(src):
-    twin = d / "plugins" / "cache" / "conductor-bs" / "0.1.0" / "skills" / "conductor-winddown"
+    # Two-level `<owner>/<repo>` under `cache/`, matching the REAL fixture at the top of this
+    # file (`.../cache/conductor-bs/conductor-bs/0.1.0/...`) -- not a shallower one-level shape.
+    # A shallower fixture here used to pass this check by luck (a stray disambiguation fallback
+    # happened to land on a byte-identical copy), which is exactly the silent-degradation shape
+    # `_find_source`'s `_Ambiguous` sentinel now refuses to allow: the repo name recovered from
+    # the cache path must actually name a candidate, or the guard states the ambiguity instead
+    # of guessing.
+    twin = (d / "plugins" / "cache" / "conductor-bs" / "conductor-bs" / "0.1.0"
+            / "skills" / "conductor-winddown")
     twin.mkdir(parents=True)
     (twin / "SKILL.md").write_bytes(pathlib.Path(src).read_bytes())
     denied, _ = run("Read", {"file_path": str(twin / "SKILL.md")})
     check("POSITIVE: a cache copy IDENTICAL to source is allowed", not denied)
+
+# --- REAL: a shallow cache path (repo name unrecoverable) is stated as ambiguous, not guessed --
+# Two repos on THIS box genuinely share `skills/conductor-winddown/SKILL.md` (conductor-bs and
+# conductor-pub -- filed in f848fa0, 2026-08-09). A one-level `cache/<repo>/<version>/...` path
+# gives `_repo_name_from_cache_path` the version string instead of a repo name, so it cannot
+# narrow the candidates. The pre-fix behaviour silently picked "newest" here -- the same
+# defect the REAL case above tests for, just reached through a different cache-path shape.
+if os.path.isfile(src):
+    ambiguous = d / "plugins" / "cache" / "0.1.0" / "skills" / "conductor-winddown"
+    ambiguous.mkdir(parents=True)
+    (ambiguous / "SKILL.md").write_text("a genuinely different cached copy\n", encoding="utf-8")
+    denied, out = run("Read", {"file_path": str(ambiguous / "SKILL.md")})
+    check("REAL: an unresolvable repo name is DENIED, not silently guessed", denied)
+    check("REAL: and the block says AMBIGUOUS rather than naming one wrong source",
+          "MULTIPLE editable candidates" in out)
 
 # --- POSITIVE: ordinary reads are untouched ------------------------------------------------
 denied, _ = run("Read", {"file_path": HOOK})
