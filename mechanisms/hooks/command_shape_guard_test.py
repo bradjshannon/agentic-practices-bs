@@ -30,19 +30,19 @@ def fence(lang, body):
 # --- SHOULD FIRE: the four real board commands, as they would appear fenced in chat -----------
 
 check("board1: drive-fwdslash + piped tail, unlabeled fence",
-      bool(evaluate(fence("", 'git -C "C:/Users/brad/Documents/GitHub/iotta-firmware" tag -l | tail -5'))),
+      bool(evaluate(fence("", 'git -C "C:/Users/user/Documents/GitHub/myproject-firmware" tag -l | tail -5'))),
       True)
 
 check("board2: drive-fwdslash, bash-labeled fence",
-      bool(evaluate(fence("bash", "git -C C:/Users/brad/Documents/GitHub/iotta-bs push origin main"))),
+      bool(evaluate(fence("bash", "git -C C:/Users/user/Documents/GitHub/myproject push origin main"))),
       True)
 
 check("board4: drive-fwdslash, powershell-labeled fence (mislabeled-but-still-broken)",
-      bool(evaluate(fence("powershell", "git -C C:/Users/brad/Documents/GitHub/iotta-bs ls-files .env"))),
+      bool(evaluate(fence("powershell", "git -C C:/Users/user/Documents/GitHub/myproject ls-files .env"))),
       True)
 
 check("grep piped, no drive path",
-      bool(evaluate(fence("bash", "docker logs iotta-dev | grep ERROR"))),
+      bool(evaluate(fence("bash", "docker logs myproject-dev | grep ERROR"))),
       True)
 
 check("bash var-assign command substitution",
@@ -60,11 +60,11 @@ check("2>/dev/null",
 # --- SHOULD NOT FIRE: the three positive controls the brief names, plus fence-lang exemptions --
 
 check("CONTROL: legit PowerShell command with backslashes",
-      bool(evaluate(fence("powershell", r"git -C C:\Users\brad\Documents\GitHub\iotta-bs status"))),
+      bool(evaluate(fence("powershell", r"git -C C:\Users\user\Documents\GitHub\myproject status"))),
       False)
 
 check("CONTROL: wsl -e docker exec with container POSIX paths",
-      bool(evaluate(fence("", "wsl -e docker exec iotta-dev cat /etc/hostname"))),
+      bool(evaluate(fence("", "wsl -e docker exec myproject-dev cat /etc/hostname"))),
       False)
 
 check("CONTROL: && is valid pwsh7, not flagged",
@@ -72,7 +72,7 @@ check("CONTROL: && is valid pwsh7, not flagged",
       False)
 
 check("CONTROL: forward-slash path but every context is bash/WSL (fence-lang inferred)",
-      bool(evaluate(fence("bash", "ls -la /mnt/c/Users/brad/Documents/GitHub/iotta-bs"))),
+      bool(evaluate(fence("bash", "ls -la /mnt/c/Users/user/Documents/GitHub/myproject"))),
       False)
 
 check("CONTROL: non-shell fence language (python) is not scanned even with bash-looking text",
@@ -80,7 +80,7 @@ check("CONTROL: non-shell fence language (python) is not scanned even with bash-
       False)
 
 check("CONTROL: json fence never scanned",
-      bool(evaluate(fence("json", '{"path": "C:/Users/brad/foo"}'))),
+      bool(evaluate(fence("json", '{"path": "C:/Users/user/foo"}'))),
       False)
 
 # --- Note: a normal Bash-tool invocation is structurally out of scope ---------------------------

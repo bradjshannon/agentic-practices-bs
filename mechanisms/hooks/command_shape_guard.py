@@ -4,7 +4,7 @@ command that will not run as pasted.
 
 WHY THIS HOOK EXISTS
 --------------------
-Brad, three messages in about two minutes, 2026-08-15:
+The operator, three messages in about two minutes, 2026-08-15:
 
   "you've GOT TO STOP giving me powershell commands with the wrong slashes"
   "it wastes turns EVERY TIME"
@@ -18,8 +18,8 @@ strictly more expensive than the one turn this hook spends catching it before it
 MEASURED BEFORE BUILDING, per this estate's own rule (`docs/tool-enforcement-candidates.md`):
 scanning this project's own transcript corpus (334 fenced code blocks, 291 in a shell-shaped
 fence language) found the failure at 0.7% of shell-shaped blocks (2/291) -- both hits arguably
-legitimate WSL/bash-context commands rather than the pattern Brad is naming, so the TRUE rate on
-the pattern he means is likely lower still. That is far below "every", which the third message
+legitimate WSL/bash-context commands rather than the pattern the operator is naming, so the TRUE
+rate on the pattern they mean is likely lower still. That is far below "every", which the third message
 claims -- read as EITHER a very recent, unmeasured spike this corpus does not capture, OR (more
 likely, given the aggregate rate) a small number of recent instances that felt like "every" in
 the moment. Either way the fix is the same: catch it before it ships, cheaply.
@@ -27,7 +27,7 @@ the moment. Either way the fix is the same: catch it before it ships, cheaply.
 WHY A `stop_gate.py` CHECKS ENTRY AND NOT A STANDALONE `Stop` HOOK
 -------------------------------------------------------------------
 `stop_gate.py`'s own docstring already made this argument once (duplicated blocking Stop hooks
-cost Brad a re-read each): every check lives in ONE CHECKS list so all of a turn's objections
+cost the operator a re-read each): every check lives in ONE CHECKS list so all of a turn's objections
 land in a single consolidated block instead of one block per check. A rare check (this one fires
 on well under 1% of turns per the measurement above) costs nothing extra on the ~99% of turns
 where it is silent, and on the rare turn it DOES fire, it joins whatever else that turn already
@@ -153,7 +153,7 @@ def main() -> int:
     reason = (
         "This turn's own fenced command block will not run as pasted into PowerShell:\n\n"
         + shown + "\n\n"
-        "Brad, 2026-08-15: \"you've GOT TO STOP giving me powershell commands with the wrong\n"
+        "The operator, 2026-08-15: \"you've GOT TO STOP giving me powershell commands with the wrong\n"
         "slashes\" / \"it wastes turns EVERY TIME\" / \"EVERY powershell command I have to tell\n"
         "you to fix it.\"\n\n"
         "FIX: rewrite the block using the replacement named above -- do not just restate the "

@@ -41,9 +41,15 @@ jobs:
             echo "no tools/*_test.py found -- this job would report success having run nothing"
             exit 2
           fi
-          failed=0
+          failed=()
           for t in "${tests[@]}"; do
             echo "=== $t ==="
-            python3 "$t" || failed=1
+            python3 "$t" || failed+=("$t")
           done
-          exit $failed
+          if [ ${#failed[@]} -gt 0 ]; then
+            echo ""
+            echo "FAILED (${#failed[@]}): ${failed[*]}"
+            exit 1
+          fi
+          echo ""
+          echo "all ${#tests[@]} tools/*_test.py suite(s) passed"
