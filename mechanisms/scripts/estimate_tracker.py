@@ -315,14 +315,29 @@ def handle_post(payload):
     state = _load(path)
     pending = state.get("pending") or []
     description = (tool_input.get("description") or "")[:120]
+    subagent_type = tool_input.get("subagent_type") or "general-purpose"
 
-    # Match the most recent pending entry with the same description -- dispatches are issued
-    # sequentially by one model, so this is reliable without needing a shared correlation id.
+    # Match the most recent pending entry with the same (description, subagent_type) --
+    # dispatches are issued sequentially by one model, so this is reliable without needing a
+    # shared correlation id. Matching on description ALONE collided when two dispatches (e.g. a
+    # revive-vs-fresh-agent retry of the same lot) reused the same description text under a
+    # different subagent_type -- one entry then silently orphaned the other. Measured 2026-08-22:
+    # a reconciliation pass found several of the 551 orphaned entries traced to exactly this.
     idx = None
     for i in range(len(pending) - 1, -1, -1):
-        if pending[i].get("description") == description:
+        if pending[i].get("description") == description and (
+            pending[i].get("subagent_type") == subagent_type
+        ):
             idx = i
             break
+    if idx is None:
+        # Fall back to description-only, for entries recorded before subagent_type was tracked
+        # (or the rare cross-type dispatch of literally the same description) -- fail toward the
+        # old behavior rather than orphaning outright.
+        for i in range(len(pending) - 1, -1, -1):
+            if pending[i].get("description") == description:
+                idx = i
+                break
     if idx is None:
         return allow()  # no ESTIMATE was recorded for this dispatch (shouldn't happen; fail open)
 
