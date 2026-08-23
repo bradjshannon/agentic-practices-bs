@@ -136,3 +136,48 @@ def record(hook: str, *, trigger: str = "", transcript_path: str | None = None,
             fh.write(json.dumps(row, ensure_ascii=False) + "\n")
     except Exception:
         pass  # a dead metric must never take a live hook down with it
+
+
+def describe_call(payload: object) -> str:
+    """Short human-readable description of the tool call a guard was adjudicating, e.g.
+    ``Bash: git push origin main``. Best-effort; never raises. Used by ``record_fail_open`` so
+    a COULD-NOT-ADJUDICATE row names what was in flight when the guard crashed, not just that
+    it crashed.
+    """
+    try:
+        src = payload if isinstance(payload, dict) else _BOUND_PAYLOAD
+        if not isinstance(src, dict):
+            return ""
+        tool = src.get("tool_name") or src.get("hook_event_name") or ""
+        tin = src.get("tool_input") or {}
+        detail = (tin.get("command") or tin.get("file_path") or tin.get("notebook_path")
+                  or tin.get("description") or tin.get("prompt") or "")
+        text = f"{tool}: {detail}" if detail else str(tool)
+        return text[:150]
+    except Exception:
+        return ""
+
+
+def record_fail_open(hook: str, exc: BaseException, *, payload: object = None,
+                      transcript_path: str | None = None, session: str | None = None,
+                      tool_call: str | None = None) -> None:
+    """Bank a COULD-NOT-ADJUDICATE row: a guard's fail-open catch fired, so the call was
+    ALLOWED not because the guard checked it and approved, but because the guard itself broke.
+
+    This is a THIRD state, not a second flavour of allow. Without it, a crashed guard and an
+    absent guard are indistinguishable from outside -- both look like silence. Fail-open stays
+    the contract (never blocks on a guard's own bug); this only makes the crash observable.
+
+    Never raises -- delegates to ``record()``, which never raises. Call this from INSIDE the
+    fail-open except block, before the guard exits 0 / allows.
+    """
+    try:
+        name = type(exc).__name__
+        call = tool_call if tool_call is not None else describe_call(payload)
+        trigger = f"{name}: {exc}"[:200]
+        record(hook, trigger=trigger, transcript_path=transcript_path, session=session,
+               payload=payload,
+               extra={"decision": "could_not_adjudicate", "exception_type": name,
+                      "tool_call": call})
+    except Exception:
+        pass
