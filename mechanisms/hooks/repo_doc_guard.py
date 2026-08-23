@@ -221,6 +221,15 @@ def collect_read_paths(transcript_path):
 
 def main():
     data = json.loads(sys.stdin.read())
+    try:
+        # So a crash further down (caught by the __main__ fail-open below) can still name the
+        # session and the tool call it was adjudicating -- deny()/_log() already resolve the
+        # session this way; the fail-open path had no equivalent until now.
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import hook_log
+        hook_log.bind(data)
+    except Exception:
+        pass
     tin = data.get("tool_input") or {}
     target = tin.get("file_path") or tin.get("notebook_path")
     if not target:
@@ -281,5 +290,16 @@ if __name__ == "__main__":
         main()
     except SystemExit:
         raise
-    except Exception:
-        sys.exit(0)  # FAIL-OPEN: never block editing because the guard broke
+    except Exception as _exc:
+        # FAIL-OPEN: never block editing because the guard broke. But a broken guard and an
+        # absent guard must not be indistinguishable from outside -- record the crash to the
+        # SAME sink deny() writes to, distinctly from a deny (2026-08-13: an incomplete
+        # agent-registry fixture made a revive_before_dispatch positive fail open silently;
+        # this is that class of miss, made observable without making it blocking).
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            import hook_log
+            hook_log.record_fail_open("repo_doc_guard", _exc)
+        except Exception:
+            pass
+        sys.exit(0)

@@ -435,8 +435,18 @@ def main():
         if event == "PreToolUse":
             return handle_pre(payload)
         return allow()
-    except Exception:  # noqa: BLE001 -- fail-open is the contract; this is a metrics toy, not a
-        # safety control, so a bug here must never cost a turn or a dispatch.
+    except Exception as exc:  # noqa: BLE001 -- fail-open is the contract; this is a metrics
+        # toy, not a safety control, so a bug here must never cost a turn or a dispatch. But a
+        # crashed guard adjudicated nothing -- record that distinctly from a clean allow, so a
+        # broken guard and an absent one are not indistinguishable from outside (2026-08-13
+        # revive_before_dispatch false pass: a bad fixture made block_reason() raise, fail-open
+        # turned it into a silent allow, and nothing said so).
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            import hook_log
+            hook_log.record_fail_open("estimate_tracker", exc, payload=payload)
+        except Exception:
+            pass
         return allow()
 
 

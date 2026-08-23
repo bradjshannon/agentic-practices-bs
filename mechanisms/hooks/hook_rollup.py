@@ -374,9 +374,20 @@ def rollup(since=None):
         h = f.get("hook") or "?"
         d = by_hook.setdefault(h, {
             "fires": 0, "complied": 0, "suspect": 0, "unclassified": 0,
+            "could_not_adjudicate": 0,
             "sessions": set(), "first": None, "last": None, "triggers": {}, "reasons": {},
         })
         d["fires"] += 1
+        # COULD-NOT-ADJUDICATE: the guard's fail-open catch fired -- it did not check the call,
+        # it crashed and allowed by contract. hook_log.record_fail_open() tags these
+        # `decision: could_not_adjudicate` at the SAME sink deny() writes DENIED rows to, so
+        # this is counted here rather than a second aggregation surface (2026-08-23). It is
+        # counted alongside, not instead of, the complied/suspect/unclassified classification
+        # below -- a crashed guard has no corrective action to comply with, so it will also
+        # land `unclassified` there; this counter is what makes it findable instead of
+        # dissolving into the general unclassified pile.
+        if f.get("decision") == "could_not_adjudicate":
+            d["could_not_adjudicate"] += 1
         if f.get("session"):
             d["sessions"].add(f["session"])
         ts = f.get("ts")
@@ -398,6 +409,7 @@ def rollup(since=None):
             "complied": d["complied"],
             "suspect": d["suspect"],
             "unclassified": d["unclassified"],
+            "could_not_adjudicate": d["could_not_adjudicate"],
             "classified_fraction": round(judged / d["fires"], 3) if d["fires"] else None,
             "sessions": len(d["sessions"]),
             "first": d["first"],
@@ -419,12 +431,17 @@ def _fmt_report(data, show_reasons=False):
     tot_f = sum(d["fires"] for d in data.values())
     tot_c = sum(d["complied"] for d in data.values())
     tot_s = sum(d["suspect"] for d in data.values())
+    tot_cna = sum(d["could_not_adjudicate"] for d in data.values())
     lines = []
     lines.append("HOOK FIRE ROLLUP  (observations, not verdicts)")
     lines.append("=" * 62)
     lines.append(f"corpus: {tot_f} fires from {os.path.basename(LOG_PATH)}  |  "
                  f"classified {tot_c + tot_s} ({(tot_c + tot_s) / tot_f:.1%} of {tot_f}): "
                  f"{tot_c} complied, {tot_s} suspect")
+    if tot_cna:
+        lines.append(f"{tot_cna} fire(s) COULD-NOT-ADJUDICATE across "
+                     f"{sum(1 for d in data.values() if d['could_not_adjudicate'])} hook(s) -- "
+                     "a fail-open catch fired and allowed without checking; see per-hook lines.")
     for h in sorted(data, key=lambda k: -data[k]["fires"]):
         d = data[h]
         sr = d["suspect_rate"]
@@ -434,10 +451,16 @@ def _fmt_report(data, show_reasons=False):
             flag = "  <-- REVIEW: mostly worked around"
         if d["complied"] and h in WEAK_RULES:
             flag += "  [complied rule is WEAK]"
+        if d["could_not_adjudicate"]:
+            flag += f"  <-- {d['could_not_adjudicate']} COULD-NOT-ADJUDICATE (guard crashed, failed open)"
         lines.append(f"\n{h}{flag}")
         lines.append(f"  fires {d['fires']}  |  complied {d['complied']}  "
                      f"suspect {d['suspect']}  unclassified {d['unclassified']}  |  "
                      f"suspect-rate {sr_s}  |  sessions {d['sessions']}")
+        if d["could_not_adjudicate"]:
+            lines.append(f"  could-not-adjudicate {d['could_not_adjudicate']}  "
+                         "(fail-open catch fired -- allowed, but not because it checked and "
+                         "approved)")
         if d["first"]:
             lines.append(f"  span {d['first'][:10]} .. {d['last'][:10]}")
         if show_reasons:
