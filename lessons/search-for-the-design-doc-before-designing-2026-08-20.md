@@ -74,3 +74,28 @@ Related: `a-cannot-measure-claim-is-a-claim-about-your-tooling-2026-08-19.md` �
 layer up. There the false claim was *"we cannot measure that"*; here it is *"this has not been
 designed."* Both are negative existence claims about the project's own assets, both feel like
 observations rather than assertions, and both are refuted by one search.
+
+## Recurrence, four days later, same document, a different half of "read it to the end" (2026-08-24)
+
+This exact design document has a second caveats section (§4a) documenting that under the mode
+being tested, **neither** authored half of the split instruction reaches its target — not just
+the half already known about. A test suite ran against the document's own design, its headline
+result (a decisive pass-rate gap between two configurations) was reported to the operator with an
+artifact, and the report did not surface that the losing configuration's OTHER half was also
+broken — because that fact lived in a caveats section of a document already open and partially
+quoted, not a section anyone had re-read in full before writing up the result.
+
+The operator's reaction, escalating: first that the result told him nothing useful, then —
+correctly — that the actual question he needed answered ("is the architecture worse, or are both
+its inputs just broken") remained unanswered by data that looked decisive.
+
+**This is not a new rule — it's the same one, applied one step later in the lifecycle.** "Read a
+found document to the end before designing from it" (above) and "read a found document's own
+caveats section in full before reporting a result it describes as decisive" are the same
+discipline at two different moments: before you build, and before you report. A document you
+already have open and are actively quoting from is exactly as easy to under-read as one you never
+opened — quoting one paragraph creates the feeling of having consulted the source, which is not
+the same claim as having read all of it. **Before headlining any result against a design document,
+grep that document for "caveat", "not established", "does not", and "only" — the four words a
+limitations section is built from — even in a document you already cited elsewhere in the same
+piece of work.**
