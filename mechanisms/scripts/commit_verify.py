@@ -158,7 +158,17 @@ def run(repo: Path, paths: list[str], message: str, *, push: bool,
     # The check still bites where it matters: `unchanged` is computed from `git status`
     # BEFORE the commit, so a path that had real changes and then failed to land is still
     # absent here and still raises.
-    in_commit = set(git(repo, "show", "--pretty=", "--name-only",
+    #
+    # `git show --pretty= --name-only <head>` is a DIFF against the first parent, not a
+    # membership check — and for a merge commit git's diff-tree machinery prints NO
+    # names at all unless -m/-c/--cc is given (that is a deliberate git default: "do not
+    # show diffs for merge commits"). Measured 2026-08-24: concluding a real, correct
+    # merge this way reported every named path "not in HEAD" while `git show HEAD --stat`
+    # and `git ls-tree` both showed them present and correct — a false failure on a good
+    # merge commit. `git ls-tree -r --name-only <head>` lists the actual tree contents
+    # regardless of how many parents the commit has, so it is what a MEMBERSHIP check
+    # should have been using all along.
+    in_commit = set(git(repo, "ls-tree", "-r", "--name-only",
                         head).splitlines())
     absent = [p for p in paths if p not in in_commit and p not in unchanged]
     if absent:

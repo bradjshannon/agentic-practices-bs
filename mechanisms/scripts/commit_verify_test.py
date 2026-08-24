@@ -178,6 +178,40 @@ with Sandbox() as s:
     check("  ... and it names the path that went missing", "dropped.txt" in err, True)
 
 
+# --- THE FOURTH REGRESSION: a merge commit false-negatived by POSTCONDITION 3 --------------
+# Found 2026-08-24 in a real iotta-bs merge (52202fe4, HEAD): commit_verify exited 1 claiming
+# HEAD did not contain the named new-file paths, while `git show HEAD --stat` and `git ls-tree`
+# both independently confirmed they were present and correct. Root cause: POSTCONDITION 3 used
+# `git show --pretty= --name-only <head>`, which is a DIFF against the first parent -- and git's
+# diff-tree machinery prints NO names at all for a merge commit unless -m/-c/--cc is given. Any
+# merge, however correct, produced an empty `in_commit` set and every named path was reported
+# absent. `git ls-tree -r --name-only` lists real tree membership regardless of parent count, so
+# it is what a MEMBERSHIP check should have used from the start.
+#
+# Reproduced here with an ACTUAL two-parent merge commit (not a squash, not a fast-forward):
+# two branches each add a distinct file, merged with --no-ff, then commit_verify is asked to
+# conclude that merge by naming the new file each side contributed.
+
+with Sandbox() as s:
+    git(s.repo, "checkout", "-q", "-b", "feature")
+    s.write("feature.txt", "from feature\n")
+    git(s.repo, "add", "feature.txt")
+    git(s.repo, "commit", "-q", "-m", "add feature.txt")
+    git(s.repo, "checkout", "-q", "main")
+    s.write("mainline.txt", "from main\n")
+    git(s.repo, "add", "mainline.txt")
+    git(s.repo, "commit", "-q", "-m", "add mainline.txt")
+    rc_merge, _, _ = git(s.repo, "merge", "--no-ff", "--no-commit", "feature")
+    check("merge --no-commit set up cleanly (test rig, not commit_verify)", rc_merge, 0)
+    # commit_verify itself performs the commit that concludes the merge.
+    rc, out, err = run_cv(s.repo, ["feature.txt", "mainline.txt"], "merge feature\n")
+    check("a real merge commit is NOT false-negatived", rc, 0)
+    check("  ... and it actually has two parents (a real merge, not a squash)",
+          len(git(s.repo, "rev-parse", "HEAD^@")[1].split()), 2)
+    check("  ... and it did not falsely claim paths missing from HEAD",
+          "does not contain" in err, False)
+
+
 # --- REFUSALS. The load-bearing half. ------------------------------------------------------
 # Each asserts BOTH a non-zero exit AND that HEAD did not move. Exit code alone would pass
 # on a version that committed and then complained.
