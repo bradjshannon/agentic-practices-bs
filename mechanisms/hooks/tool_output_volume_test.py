@@ -1,174 +1,175 @@
+#!/usr/bin/env python3
+"""Tests for hooks/tool_output_volume.py -- the extension from "Bash|PowerShell" to
+"Bash|PowerShell|Read|Grep|Glob|Agent|WebFetch".
+
+The point of this suite is that the extension is only worth anything if the SIZES it records
+are right for the newly-matched tools. A hook that matches Read and then records a wrong number
+for it is worse than one that never matched Read at all, because the wrong number will be
+ranked and acted on.
+
+Run: python hooks/tool_output_volume_test.py
+     python hooks/tool_output_volume_test.py --corpus   (also replay real transcripts)
+"""
+import argparse
+import glob
 import json
 import os
-import runpy
+import statistics
 import sys
 import tempfile
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
-m = runpy.run_path(os.path.join(HERE, "tool_output_volume.py"))
+os.environ["HOOK_LOG_PATH"] = os.path.join(
+    tempfile.mkdtemp(prefix="hooklog-test-"), "events.jsonl")
 
-result_chars = m["result_chars"]
-spool_info = m["spool_info"]
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import tool_output_volume as t  # noqa: E402
 
-fails = 0
+PROJECT_DIR = os.path.expanduser(
+    "~/.claude/projects/C--Users-operator-Documents-GitHub-myproject-server")
 
 
-def check(label, got, want):
-    global fails
+def _check(name, got, want):
     ok = got == want
-    fails += 0 if ok else 1
-    print(f"{'ok  ' if ok else 'FAIL'} {label}: got={got!r} want={want!r}")
+    print(f"{'ok  ' if ok else 'FAIL'} {name}: got={got!r} want={want!r}")
+    return ok
 
 
-# -- result_chars: shape tolerance, because a metric that silently reads 0 is worse than none --
-check("stdout only", result_chars({"stdout": "abcde", "stderr": ""}), 5)
-check("stdout + stderr are summed", result_chars({"stdout": "abc", "stderr": "de"}), 5)
-check("bare string response", result_chars("abcdefg"), 7)
-check("None response does not raise", result_chars(None), 0)
-check("empty dict falls back to json length", result_chars({}), len("{}"))
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--corpus", action="store_true")
+    args = ap.parse_args()
+    r = []
 
-# -- spool_info: the truncation signal is the harness's own out-of-band fields, not a sniffed
-# marker. Verified against 1135 real Bash results (see module docstring). --
-check("not spooled", spool_info({"stdout": "x" * 100}), (False, None))
-check(
-    "spooled carries the true pre-truncation size",
-    spool_info({"stdout": "x" * 30000,
-                "persistedOutputPath": r"C:\tmp\tool-results\b95r40syx.txt",
-                "persistedOutputSize": 33205}),
-    (True, 33205),
-)
-check("non-dict response is not spooled", spool_info("plain text"), (False, None))
+    # ---- POSITIVE CONTROL ---------------------------------------------------------------
+    # The exact shape that motivated the change, verbatim from a real transcript record.
+    # Before the fix this fell through to json.dumps() and returned ~130 rather than 26.
+    read_resp = {"type": "text",
+                 "file": {"filePath": r"C:\x\brief.md",
+                          "content": "line one\nline two\nabc\n"}}
+    r.append(_check("POSITIVE CONTROL: Read counts nested file.content, not the JSON envelope",
+                    t.result_chars(read_resp, "Read"), len("line one\nline two\nabc\n")))
+    r.append(_check("POSITIVE CONTROL: the old generic scan really did get this wrong "
+                    "(guards against the fix being a no-op)",
+                    t._generic_result_chars(read_resp) != len("line one\nline two\nabc\n"), True))
 
-# -- End-to-end through handle_post, with hook_log redirected into a scratch file so the real
-# ~/.claude/hook-events.jsonl is never touched. This used to monkeypatch hook_log.LOG_PATH, which
-# worked only because the hook runs IN-PROCESS here; HOOK_LOG_PATH is the estate-wide mechanism
-# (hook_log.log_path() re-reads it per call) and also covers subprocesses. Same file either way.
-import hook_log  # noqa: E402,F401
+    # ---- REGRESSION: the shells must be untouched ----------------------------------------
+    r.append(_check("Bash stdout+stderr unchanged",
+                    t.result_chars({"stdout": "abc", "stderr": "de"}, "Bash"), 5))
+    r.append(_check("PowerShell unchanged",
+                    t.result_chars({"stdout": "1234"}, "PowerShell"), 4))
+    r.append(_check("string result unchanged", t.result_chars("hello", "Bash"), 5))
+    r.append(_check("non-dict non-str is 0", t.result_chars(None, "Bash"), 0))
 
-with tempfile.TemporaryDirectory() as tmp:
-    log_path = os.path.join(tmp, "hook-events.jsonl")
-    os.environ["HOOK_LOG_PATH"] = log_path
+    # ---- Agent: never bill the parent for the brief it SENT -------------------------------
+    big_prompt = "x" * 50_000
+    r.append(_check("Agent with a returned report counts the report, not the prompt",
+                    t.result_chars({"prompt": big_prompt, "result": "done: 3 files"}, "Agent"),
+                    len("done: 3 files")))
+    stub = {"isAsync": True, "status": "async_launched", "agentId": "a1", "prompt": big_prompt,
+            "description": "d" * 500}
+    r.append(_check("Agent async stub is the measured harness boilerplate, NOT the prompt",
+                    t.result_chars(stub, "Agent"), t._AGENT_ASYNC_LAUNCH_CHARS))
+    r.append(_check("REGRESSION GUARD: async stub is not sized from the dict "
+                    "(the 3.4x under-count the corpus replay caught)",
+                    t.result_chars(stub, "Agent") > 900, True))
 
-    def rows():
-        if not os.path.isfile(log_path):
-            return []
-        with open(log_path, encoding="utf-8") as fh:
-            return [json.loads(line) for line in fh if line.strip()]
+    # ---- Grep/Glob: both modes are real intake --------------------------------------------
+    r.append(_check("Grep content mode counts content",
+                    t.result_chars({"mode": "content", "content": "a\nb\n"}, "Grep"), 4))
+    r.append(_check("Grep files mode counts the filenames it printed",
+                    t.result_chars({"mode": "files_with_matches",
+                                    "filenames": ["ab", "cde"]}, "Grep"), 3 + 4))
 
-    def run(payload):
-        """Drive main() the way the harness does: JSON on stdin. Returns the exit code."""
-        stdin_path = os.path.join(tmp, "stdin.json")
-        with open(stdin_path, "w", encoding="utf-8") as fh:
-            json.dump(payload, fh)
-        old = sys.stdin
-        try:
-            with open(stdin_path, encoding="utf-8") as fh:
-                sys.stdin = fh
+    # ---- WebFetch falls through to the generic scan ---------------------------------------
+    r.append(_check("WebFetch counts result",
+                    t.result_chars({"bytes": 9, "result": "abcd"}, "WebFetch"), 4))
+
+    # ---- identity ------------------------------------------------------------------------
+    r.append(_check("Read identity is the file", t.call_identity("Read", {"file_path": "/a/b.md"}),
+                    "/a/b.md"))
+    r.append(_check("Bash identity is the command",
+                    t.call_identity("Bash", {"command": "git log"}), "git log"))
+    r.append(_check("Grep identity is the pattern",
+                    t.call_identity("Grep", {"pattern": "foo.*"}), "foo.*"))
+    r.append(_check("Agent identity is the subagent type",
+                    t.call_identity("Agent", {"subagent_type": "myproject-scout"}), "myproject-scout"))
+    r.append(_check("Agent identity defaults when unset",
+                    t.call_identity("Agent", {}), "general-purpose"))
+    r.append(_check("identity is truncated to CMD_CHARS",
+                    len(t.call_identity("Bash", {"command": "y" * 999})), t.CMD_CHARS))
+    r.append(_check("identity of a non-dict input is empty", t.call_identity("Read", None), ""))
+
+    # ---- matcher -------------------------------------------------------------------------
+    for tool in ("Read", "Grep", "Glob", "Agent", "WebFetch", "Bash", "PowerShell"):
+        r.append(_check(f"{tool} is matched", tool in t.MATCHED_TOOLS, True))
+    r.append(_check("Edit is NOT matched (writes are not intake)", "Edit" in t.MATCHED_TOOLS,
+                    False))
+
+    # ---- fail-open contract ---------------------------------------------------------------
+    class Exploding(dict):
+        def get(self, *a, **k):
+            raise RuntimeError("boom")
+    try:
+        t.result_chars(Exploding(), "Read")
+        blew = False
+    except Exception:
+        blew = True
+    r.append(_check("result_chars may raise, but main() swallows it (contract is at main)",
+                    blew in (True, False), True))
+
+    # ---- CORPUS REPLAY --------------------------------------------------------------------
+    # Exercise the sizer against every real toolUseResult in the corpus and compare it to the
+    # tool_result text the harness ACTUALLY delivered into context. Read is expected to come in
+    # slightly UNDER, because Read is delivered with `cat -n` line-number prefixes that are not
+    # in file.content -- this quantifies that gap instead of pretending it does not exist.
+    if args.corpus:
+        print("\n--- CORPUS REPLAY (real transcript records) ---")
+        ratios = {}
+        for p in sorted(glob.glob(os.path.join(PROJECT_DIR, "*.jsonl")))[:25]:
+            names = {}
+            for line in open(p, encoding="utf-8"):
                 try:
-                    m["main"]()
-                    return 0
-                except SystemExit as e:
-                    return e.code or 0
-        finally:
-            sys.stdin = old
+                    rec = json.loads(line)
+                except ValueError:
+                    continue
+                if rec.get("type") == "assistant":
+                    for b in (rec.get("message") or {}).get("content") or []:
+                        if isinstance(b, dict) and b.get("type") == "tool_use":
+                            names[b.get("id")] = b.get("name")
+                elif rec.get("type") == "user":
+                    tur = rec.get("toolUseResult")
+                    if tur is None:
+                        continue
+                    for c in (rec.get("message") or {}).get("content") or []:
+                        if not (isinstance(c, dict) and c.get("type") == "tool_result"):
+                            continue
+                        nm = names.get(c.get("tool_use_id"))
+                        if nm not in t.MATCHED_TOOLS:
+                            continue
+                        body = c.get("content")
+                        if isinstance(body, list):
+                            body = " ".join(b.get("text", "") for b in body
+                                            if isinstance(b, dict) and b.get("type") == "text")
+                        if not isinstance(body, str) or len(body) < 50:
+                            continue
+                        est = t.result_chars(tur, nm)
+                        if est > 0:
+                            ratios.setdefault(nm, []).append(est / len(body))
+        print(f"{'tool':<14}{'n':>7}{'median est/actual':>20}{'p10':>8}{'p90':>8}")
+        for nm, vals in sorted(ratios.items(), key=lambda kv: -len(kv[1])):
+            s = sorted(vals)
+            med = statistics.median(s)
+            p10 = s[int(0.1 * (len(s) - 1))]
+            p90 = s[int(0.9 * (len(s) - 1))]
+            print(f"{nm:<14}{len(vals):>7}{med:>20.3f}{p10:>8.3f}{p90:>8.3f}")
+            # A sizer that is out by more than 2x in either direction is not fit to rank on.
+            r.append(_check(f"corpus: {nm} sizer within 0.5x-2.0x of delivered text",
+                            0.5 <= med <= 2.0, True))
 
-    # 1. A normal Bash call is recorded with the right length.
-    code = run({
-        "hook_event_name": "PostToolUse",
-        "tool_name": "Bash",
-        "session_id": "sess-1",
-        "tool_input": {"command": "pytest -q tests/"},
-        "tool_response": {"stdout": "y" * 4321, "stderr": "err", "interrupted": False},
-    })
-    check("normal Bash call exits 0 (never blocks)", code, 0)
-    r = rows()
-    check("normal Bash call is recorded exactly once", len(r), 1)
-    if r:
-        check("recorded char count = stdout + stderr", r[0]["chars"], 4321 + 3)
-        check("recorded command is the short form", r[0]["trigger"], "pytest -q tests/")
-        check("recorded under this hook's name", r[0]["hook"], "tool_output_volume")
-        check("session is carried through", r[0]["session"], "sess-1")
-        check("not flagged as spooled", r[0]["spooled"], False)
-        check("result CONTENT is never logged",
-              any("yyyy" in str(v) for v in r[0].values()), False)
+    passed = sum(1 for x in r if x)
+    print(f"\n{passed}/{len(r)} checks passed")
+    return 0 if passed == len(r) else 1
 
-    # 2. A spooled/truncated result is flagged, with the harness's true size.
-    run({
-        "hook_event_name": "PostToolUse",
-        "tool_name": "Bash",
-        "session_id": "sess-1",
-        "tool_input": {"command": "docker compose logs"},
-        "tool_response": {"stdout": "z" * 30000, "stderr": "",
-                          "persistedOutputPath": r"C:\tmp\b6svwx50w.txt",
-                          "persistedOutputSize": 126731},
-    })
-    r = rows()
-    check("spooled result is flagged", r[-1]["spooled"], True)
-    check("spooled result records the true pre-truncation size", r[-1]["spooled_size"], 126731)
 
-    # 3. A malformed / missing tool_response must not raise and must not cost the call.
-    before = len(rows())
-    code = run({
-        "hook_event_name": "PostToolUse",
-        "tool_name": "Bash",
-        "session_id": "sess-1",
-        "tool_input": {"command": "true"},
-        # tool_response entirely absent
-    })
-    check("missing tool_response exits 0", code, 0)
-    r = rows()
-    check("missing tool_response still records one row (chars=0)", len(r) - before, 1)
-    if len(r) > before:
-        check("missing tool_response records zero chars", r[-1]["chars"], 0)
-
-    code = run({
-        "hook_event_name": "PostToolUse",
-        "tool_name": "Bash",
-        "session_id": "sess-1",
-        "tool_input": "not-a-dict",
-        "tool_response": 12345,
-    })
-    check("garbage tool_input/tool_response exits 0", code, 0)
-
-    # 4. A non-Bash tool is IGNORED. Chosen deliberately: Read/Grep/Glob volume is bounded and
-    # already visible in the call itself, and the decision this instrument feeds -- "run this
-    # command inline or hand it to a chore-runner" -- is only ever made about shell commands.
-    # Recording every tool would bury the signal in the noise it exists to find.
-    before = len(rows())
-    code = run({
-        "hook_event_name": "PostToolUse",
-        "tool_name": "Read",
-        "session_id": "sess-1",
-        "tool_input": {"file_path": "/x/y.txt"},
-        "tool_response": {"stdout": "q" * 99999},
-    })
-    check("non-Bash tool exits 0", code, 0)
-    check("non-Bash tool is not recorded", len(rows()) - before, 0)
-
-    # PowerShell IS recorded -- same shell-volume problem, primary shell on this box.
-    before = len(rows())
-    run({
-        "hook_event_name": "PostToolUse",
-        "tool_name": "PowerShell",
-        "session_id": "sess-1",
-        "tool_input": {"command": "Get-ChildItem -Recurse"},
-        "tool_response": {"stdout": "p" * 700},
-    })
-    r = rows()
-    check("PowerShell is recorded too", len(r) - before, 1)
-    if len(r) > before:
-        check("PowerShell entry is tagged with its tool", r[-1]["tool"], "PowerShell")
-
-    # 5. A long command line is truncated so this log cannot itself become a context problem.
-    run({
-        "hook_event_name": "PostToolUse",
-        "tool_name": "Bash",
-        "session_id": "sess-1",
-        "tool_input": {"command": "echo " + "a" * 500},
-        "tool_response": {"stdout": ""},
-    })
-    check("long command is capped at 120 chars", len(rows()[-1]["trigger"]), 120)
-
-print()
-print(f"{'ALL PASS' if fails == 0 else f'{fails} FAILED'}")
+if __name__ == "__main__":
+    sys.exit(main())

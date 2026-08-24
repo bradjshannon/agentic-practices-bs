@@ -55,7 +55,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CHECKS = [
     "requirement_before_mechanism.py",
     "command_shape_guard.py",
-    "workflow_output_to_repo.py",
+    # DE-WIRED 2026-08-17, measured-ineffective: "workflow_output_to_repo.py" fired 173 times
+    # across 173 sessions -- exactly one per session, which is a per-session announcement wearing
+    # a guard's costume, not a check that discriminates. It also banked an inconsistent event name
+    # (`fired` on 129 rows, absent on 44), so it appears in NONE of the 664 adjudicated episodes
+    # and has no measured true positive across 33,505 hook-event rows. The file is left on disk;
+    # re-wiring is this one line.
     "evidence_with_claim.py",
     "data_validity_statement.py",
     "hardware_hedge_guard.py",
