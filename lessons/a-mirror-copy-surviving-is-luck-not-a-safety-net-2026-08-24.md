@@ -1,48 +1,60 @@
-# A mirror copy surviving is luck, not a safety net — 2026-08-24
+# A stale local git clone reads as "the other run's work vanished" — 2026-08-24
+
+**CORRECTION (same day, ~30 minutes later): this file originally told a different, wrong story
+— that a wind-down push had silently failed and a downstream mirror copy was the only reason the
+content survived. That premise was false, discovered before it reached anyone: the "missing"
+commit was on `origin/main` all along, and the mirror was never load-bearing. Rewritten below with
+what actually happened.**
 
 ## What happened
 
-A conductor run (2026-08-23, server domain) did real work, wrote a proper wind-down: a compact
-session file with its judgment, and a `needs-you.md` delta summarizing four shipped fixes. Both
-were current enough to get synced into a downstream mirror in a *different* repository (an ops
-status page pulls a copy of `needs-you.md` into its own repo and pushes that copy). The sync
-succeeded and was pushed.
+A conductor run (2026-08-24) went looking for whether a prior run (2026-08-23) had left a session
+file in the authority repo. Its local clone — pulled once, early in the current run — showed no
+2026-08-23 commit at all under the relevant path: `git log` jumped straight from 2026-08-22 to the
+current run's own work. It concluded the prior run's wind-down push had silently failed, spent
+real effort "recovering" the content from a downstream mirror copy in a different repo, wrote a
+whole recovery narrative into a new session file and into the shared handoff doc, and (this file,
+originally) published a lesson about mirror copies as an accidental safety net.
 
-The originals were not. `git log` on the authority repo shows no 2026-08-23 commit touching
-either the session file or `needs-you.md` at all — it jumps straight from 2026-08-22 to the next
-run, 2026-08-24. The wind-down skill produced correct content and (presumably) ran `git push`, but
-the push never landed, and nothing in the run's own output said so.
+**All of it was wrong.** When the run's own unrelated push was rejected (non-fast-forward) and it
+fetched to resolve the conflict, `origin/main` turned out to already contain the "missing" commit
+— pushed by the 2026-08-23 run itself, on time, correctly authored. It had simply been merged into
+`main` later than usual by an unrelated concurrent process (a different conductor domain's own
+wind-down, picking up and merging in a commit that had been sitting on a branch). The local clone
+that reported it missing was stale relative to `origin/main` at the moment of the check — the
+earlier `pull` in the same run predated a large batch of upstream commits, and nothing re-fetched
+before the "it's missing" conclusion was drawn.
 
-The next conductor found the gap by trying to read the missing session file — and only recovered
-the content because the downstream mirror happened to still have it. The mirror's copy is a
-*summary for a human*, not the original: gone with it were the run's actual judgment (what it was
-uncertain about, what it considered and rejected, corrections to its own reasoning) — the exact
-material the wind-down procedure exists to preserve.
+## The wrong read, and why it happened
 
-## The wrong read
+"`git log` shows nothing since 2026-08-22, therefore nothing since 2026-08-22 reached the remote."
+That conflates **"absent from my local clone"** with **"absent from the remote"** — the same
+conflation this project's own debugging guidance already names for grep searches ("a negative
+literal string search closes one search path, not the question") and for file reads ("clean ≠
+current" — a shared clone can sit on an old commit with a clean status). A `git log` on a *local*
+ref is exactly as vulnerable as a working-tree read: it answers "what does my copy currently show,"
+not "what is actually on the remote right now."
 
-"It's fine, the content survived via the sync." **No** — it survived *this once*, by accident, because
-a downstream consumer happened to keep its own copy and that copy happened to get pushed
-correctly. The next unpushed wind-down will not be so lucky: most artifacts have no downstream
-mirror, and even this one only preserved the *summary*, not the *session file* the summary was
-distilled from.
+The false conclusion then compounded: instead of `git fetch` before concluding, the run reasoned
+forward from the (stale) negative and built an entire incident narrative — a "recovery," new
+priming content, a published lesson — on top of it. Confirming was one command
+(`git fetch && git log origin/main -- <path>`) away the whole time.
 
 ## The rule
 
-**A `git push` that returns success is a claim, not a receipt.** After any wind-down (or any
-"this must survive to the next run" write), verify the push landed in the artifact's own repo by
-reading it back from the remote — `git log origin/<branch> -- <path>`, or a fresh `git show
-origin/<branch>:<path>` — not by trusting the command's exit code, and not by trusting that *some*
-copy of the content exists somewhere. This is the exact same §6a shape ("verify the postcondition,
-not the exit code") applied to git instead of to a database write or a deploy — the mechanism that
-can silently fail is different, the discipline that catches it is identical.
+**Before concluding a commit, file, or piece of work is missing from a shared repository, `git
+fetch` fresh and check against `origin/<branch>` directly — never a local ref that was last synced
+earlier in the same session.** A `pull` from twenty minutes ago is already a snapshot, not a live
+view, on any repo other agents or processes are also writing to. Treat "missing from `git log`" the
+same way this project already treats "missing from a directory listing" or "missing from a `grep`":
+a claim about the population you actually checked, not about reality.
 
 ## Why it generalises
 
-Any system with a designated "durable carrier" (a session file, a decision log, a config-of-record)
-is vulnerable to this the moment something *downstream* of that carrier also happens to retain the
-information — because a human (or the next agent) checking "did this survive?" will find a
-plausible-looking answer in the downstream copy and stop looking, never noticing the authority
-itself is empty. The fix is not "sync harder" (see `single-authority-not-mirrored-copies-2026-08-01.md`
-for why mirroring facts doesn't fix drift) — it's confirming the *one* place designated as durable
-actually received the write, every time, because nothing else is guaranteed to be there next time.
+Any multi-agent or multi-process environment where several actors write to the same remote makes a
+local clone's freshness an unstated, decaying assumption — and the decay is invisible until
+something (here, an unrelated push rejection) forces a fetch. The specific trap is that a *negative*
+git-log result reads as authoritative because git itself gives no visible warning that the local
+ref might be behind; contrast a merge conflict or a rejected push, both of which are loud. Before
+building anything — a diagnosis, a recovery, a lesson — on top of "I don't see it," re-derive that
+absence against the freshest possible view of the remote.
